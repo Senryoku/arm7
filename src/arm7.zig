@@ -1,7 +1,10 @@
 const std = @import("std");
 const testing = std.testing;
 
-const RegisterMode = enum(u5) {
+const interpreter = @import("arm7_interpreter.zig");
+const dissasemble = @import("arm7_disassemble.zig");
+
+pub const RegisterMode = enum(u5) {
     User = 0b10000,
     FastInterrupt = 0b10001,
     Interrupt = 0b10010,
@@ -11,7 +14,7 @@ const RegisterMode = enum(u5) {
     System = 0b11111,
 };
 
-const CPSR = packed struct(u32) {
+pub const CPSR = packed struct(u32) {
     m: RegisterMode = .User,
     t: bool = false, // State bit
     f: bool = false, // FIQ Disable
@@ -26,21 +29,40 @@ const CPSR = packed struct(u32) {
 const DataProcessingInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0000;
 const DataProcessingInstructionMask: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
 
-const DataProcessingInstruction = packed struct(u32) {
+pub const Opcode = enum(u4) {
+    AND = 0b0000, // operand1 AND operand2
+    EOR = 0b0001, // operand1 EOR operand2
+    SUB = 0b0010, // operand1 - operand2
+    RSB = 0b0011, // operand2 - operand1
+    ADD = 0b0100, // operand1 + operand2
+    ADC = 0b0101, // operand1 + operand2 + carry
+    SBC = 0b0110, // operand1 - operand2 + carry - 1
+    RSC = 0b0111, // operand2 - operand1 + carry - 1
+    TST = 0b1000, // as AND, but result is not written
+    TEQ = 0b1001, // as EOR, but result is not written
+    CMP = 0b1010, // as SUB, but result is not written
+    CMN = 0b1011, // as ADD, but result is not written
+    ORR = 0b1100, // operand1 OR operand2
+    MOV = 0b1101, // operand2(operand1 is ignored)
+    BIC = 0b1110, // operand1 AND NOT operand2(Bit clear)
+    MVN = 0b1111, // NOT operand2(operand1 is ignored
+};
+
+pub const DataProcessingInstruction = packed struct(u32) {
     operand2: u12,
     rd: u4,
     rn: u4,
     s: u1,
-    opcode: u4,
+    opcode: Opcode,
     i: u1,
     tag: u2,
     cond: u4,
 };
 
-const MultiplyInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
-const MultiplyInstructionMask: u32 = 0b0000_1111_1100_0000_0000_0000_1111_0000;
+pub const MultiplyInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
+pub const MultiplyInstructionMask: u32 = 0b0000_1111_1100_0000_0000_0000_1111_0000;
 
-const MultiplyInstruction = packed struct(u32) {
+pub const MultiplyInstruction = packed struct(u32) {
     rm: u4,
     _tag2: u4,
     rs: u4,
@@ -52,10 +74,10 @@ const MultiplyInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const MultiplyLongInstructionTags: u32 = 0b0000_0000_1000_0000_0000_0000_1001_0000;
-const MultiplyLongInstructionMask: u32 = 0b0000_1111_1000_0000_0000_0000_1111_0000;
+pub const MultiplyLongInstructionTags: u32 = 0b0000_0000_1000_0000_0000_0000_1001_0000;
+pub const MultiplyLongInstructionMask: u32 = 0b0000_1111_1000_0000_0000_0000_1111_0000;
 
-const MultiplyLongInstruction = packed struct(u32) {
+pub const MultiplyLongInstruction = packed struct(u32) {
     rm: u4,
     _tag2: u4,
     rn: u4,
@@ -68,10 +90,10 @@ const MultiplyLongInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const SingleDataSwapInstructionTags: u32 = 0b0000_0001_0000_0000_0000_0000_1001_0000;
-const SingleDataSwapInstructionMask: u32 = 0b0000_1111_1011_0000_0000_1111_1111_0000;
+pub const SingleDataSwapInstructionTags: u32 = 0b0000_0001_0000_0000_0000_0000_1001_0000;
+pub const SingleDataSwapInstructionMask: u32 = 0b0000_1111_1011_0000_0000_1111_1111_0000;
 
-const SingleDataSwapInstruction = packed struct(u32) {
+pub const SingleDataSwapInstruction = packed struct(u32) {
     rm: u4,
     _tag3: u8,
     rd: u4,
@@ -82,19 +104,19 @@ const SingleDataSwapInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const BranchAndExchangeInstructionTags: u32 = 0b0000_0001_0010_1111_1111_1111_0001_0000;
-const BranchAndExchangeInstructionMask: u32 = 0b0000_1111_1111_1111_1111_1111_1111_0000;
+pub const BranchAndExchangeInstructionTags: u32 = 0b0000_0001_0010_1111_1111_1111_0001_0000;
+pub const BranchAndExchangeInstructionMask: u32 = 0b0000_1111_1111_1111_1111_1111_1111_0000;
 
-const BranchAndExchangeInstruction = packed struct(u32) {
+pub const BranchAndExchangeInstruction = packed struct(u32) {
     rm: u4,
     _tag: u24,
     cond: u4,
 };
 
-const HalfwordDataTransferRegisterOffsetInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
-const HalfwordDataTransferRegisterOffsetInstructionMask: u32 = 0b0000_1110_0100_0000_0000_1111_1001_0000;
+pub const HalfwordDataTransferRegisterOffsetInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
+pub const HalfwordDataTransferRegisterOffsetInstructionMask: u32 = 0b0000_1110_0100_0000_0000_1111_1001_0000;
 
-const HalfwordDataTransferRegisterOffsetInstruction = packed struct(u32) {
+pub const HalfwordDataTransferRegisterOffsetInstruction = packed struct(u32) {
     rm: u4,
     _tag4: u1,
     h: u1,
@@ -111,10 +133,10 @@ const HalfwordDataTransferRegisterOffsetInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const HalfwordDataTransferImmediateOffsetInstructionTags: u32 = 0b0000_0000_0100_0000_0000_0000_1001_0000;
-const HalfwordDataTransferImmediateOffsetInstructionMask: u32 = 0b0000_1110_0100_0000_0000_0000_1001_0000;
+pub const HalfwordDataTransferImmediateOffsetInstructionTags: u32 = 0b0000_0000_0100_0000_0000_0000_1001_0000;
+pub const HalfwordDataTransferImmediateOffsetInstructionMask: u32 = 0b0000_1110_0100_0000_0000_0000_1001_0000;
 
-const HalfwordDataTransferImmediateOffsetInstruction = packed struct(u32) {
+pub const HalfwordDataTransferImmediateOffsetInstruction = packed struct(u32) {
     offset2: u4,
     _tag4: u1,
     h: u1,
@@ -132,10 +154,10 @@ const HalfwordDataTransferImmediateOffsetInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const SingleDataTransferInstructionTags: u32 = 0b0000_0100_0000_0000_0000_0000_0000_0000;
-const SingleDataTransferInstructionMask: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
+pub const SingleDataTransferInstructionTags: u32 = 0b0000_0100_0000_0000_0000_0000_0000_0000;
+pub const SingleDataTransferInstructionMask: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
 
-const SingleDataTransferInstruction = packed struct(u32) {
+pub const SingleDataTransferInstruction = packed struct(u32) {
     offset: u12,
     rd: u4,
     rn: u4,
@@ -149,18 +171,18 @@ const SingleDataTransferInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const UndefinedInstructionTags: u32 = 0b0000_0110_0000_0000_0000_0000_0001_0000;
-const UndefinedInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0000;
+pub const UndefinedInstructionTags: u32 = 0b0000_0110_0000_0000_0000_0000_0001_0000;
+pub const UndefinedInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0000;
 
-const UndefinedInstruction = packed struct(u32) {
+pub const UndefinedInstruction = packed struct(u32) {
     _: u28,
     cond: u4,
 };
 
-const BlockDataTransferInstructionTags: u32 = 0b0000_1000_0000_0000_0000_0000_0000_0000;
-const BlockDataTransferInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
+pub const BlockDataTransferInstructionTags: u32 = 0b0000_1000_0000_0000_0000_0000_0000_0000;
+pub const BlockDataTransferInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
 
-const BlockDataTransferInstruction = packed struct(u32) {
+pub const BlockDataTransferInstruction = packed struct(u32) {
     reg_list: u16,
     rn: u4,
     l: u1,
@@ -172,20 +194,20 @@ const BlockDataTransferInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const BranchInstructionTags: u32 = 0b0000_1010_0000_0000_0000_0000_0000_0000;
-const BranchInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
+pub const BranchInstructionTags: u32 = 0b0000_1010_0000_0000_0000_0000_0000_0000;
+pub const BranchInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
 
-const BranchInstruction = packed struct(u32) {
+pub const BranchInstruction = packed struct(u32) {
     offset: u24,
     l: u1,
     _tag: u3,
     cond: u4,
 };
 
-const CoprocessorDataTransferInstructionTags: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
-const CoprocessorDataTransferInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
+pub const CoprocessorDataTransferInstructionTags: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
+pub const CoprocessorDataTransferInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
 
-const CoprocessorDataTransferInstruction = packed struct(u32) {
+pub const CoprocessorDataTransferInstruction = packed struct(u32) {
     crm: u4,
     _tag2: u1,
     cp: u3,
@@ -201,10 +223,10 @@ const CoprocessorDataTransferInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const CoprocessorDataOperationInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
-const CoprocessorDataOperationInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0001_0000;
+pub const CoprocessorDataOperationInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
+pub const CoprocessorDataOperationInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0001_0000;
 
-const CoprocessorDataOperationInstruction = packed struct(u32) {
+pub const CoprocessorDataOperationInstruction = packed struct(u32) {
     crm: u4,
     _tag2: u1,
     cp: u3,
@@ -216,10 +238,10 @@ const CoprocessorDataOperationInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const CoprocessorRegisterTransferInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0000;
-const CoprocessorRegisterTransferInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0001_0000;
+pub const CoprocessorRegisterTransferInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0000;
+pub const CoprocessorRegisterTransferInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0001_0000;
 
-const CoprocessorRegisterTransferInstruction = packed struct(u32) {
+pub const CoprocessorRegisterTransferInstruction = packed struct(u32) {
     crm: u4,
     _tag2: u1,
     cp: u3,
@@ -232,15 +254,15 @@ const CoprocessorRegisterTransferInstruction = packed struct(u32) {
     cond: u4,
 };
 
-const SoftwareInterruptInstructionTags: u32 = 0b0000_1111_0000_0000_0000_0000_0000_0000;
-const SoftwareInterruptInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0000_0000;
+pub const SoftwareInterruptInstructionTags: u32 = 0b0000_1111_0000_0000_0000_0000_0000_0000;
+pub const SoftwareInterruptInstructionMask: u32 = 0b0000_1111_0000_0000_0000_0000_0000_0000;
 
-const SoftwareInterruptInstruction = packed struct(u32) {
+pub const SoftwareInterruptInstruction = packed struct(u32) {
     _: u28,
     cond: u4,
 };
 
-const Instruction = packed union {
+pub const Instruction = packed union {
     DataProcessing: DataProcessingInstruction,
     Multiply: MultiplyInstruction,
     MultiplyLong: MultiplyLongInstruction,
@@ -258,7 +280,7 @@ const Instruction = packed union {
     SoftwareInterrupt: SoftwareInterruptInstruction,
 };
 
-const InstructionMasks = [_]u32{
+pub const InstructionMasks = [_]u32{
     BranchAndExchangeInstructionMask,
     BlockDataTransferInstructionMask,
     BranchInstructionMask,
@@ -276,7 +298,7 @@ const InstructionMasks = [_]u32{
     DataProcessingInstructionMask,
 };
 
-const InstructionTags = [_]u32{
+pub const InstructionTags = [_]u32{
     BranchAndExchangeInstructionTags,
     BlockDataTransferInstructionTags,
     BranchInstructionTags,
@@ -294,9 +316,11 @@ const InstructionTags = [_]u32{
     DataProcessingInstructionTags,
 };
 
-var disassemble_temp: [256]u8 = undefined;
+pub fn zero_extend(val: anytype) u32 {
+    return @as(u32, val);
+}
 
-fn sign_extend_u26(val: u26) u32 {
+pub fn sign_extend_u26(val: u26) u32 {
     if (val & 0x2000000 != 0) {
         return @as(u32, val) | 0xFC000000;
     } else {
@@ -304,160 +328,7 @@ fn sign_extend_u26(val: u26) u32 {
     }
 }
 
-fn disassemble_condition(cond: u4) []const u8 {
-    switch (cond) {
-        0b0000 => return "eq",
-        0b0001 => return "ne",
-        0b0010 => return "cs",
-        0b0011 => return "cc",
-        0b0100 => return "mi",
-        0b0101 => return "pl",
-        0b0110 => return "vs",
-        0b0111 => return "vc",
-        0b1000 => return "hi",
-        0b1001 => return "ls",
-        0b1010 => return "ge",
-        0b1011 => return "lt",
-        0b1100 => return "gt",
-        0b1101 => return "le",
-        0b1110 => return "", // al / always
-        else => return "und",
-    }
-}
-
-fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "BranchAndExchange";
-}
-
-fn disassemble_block_data_transfer(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "BlockDataTransfer";
-}
-
-fn disassemble_branch(instruction: u32) []const u8 {
-    const inst: BranchInstruction = @bitCast(instruction);
-
-    const offset = sign_extend_u26(@as(u26, inst.offset) << 2) + 8; // NOTE: This is PC relative.
-    const cond = disassemble_condition(inst.cond);
-
-    if (inst.l == 0) {
-        return std.fmt.bufPrint(&disassemble_temp, "b{s} 0x{x}", .{ cond, offset }) catch unreachable;
-    } else {
-        return std.fmt.bufPrint(&disassemble_temp, "bl{s} 0x{x}", .{ cond, offset }) catch unreachable;
-    }
-}
-
-fn disassemble_software_interrupt(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "SoftwareInterrupt";
-}
-
-fn disassemble_undefined(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "Undefined";
-}
-
-fn disassemble_single_data_transfer(instruction: u32) []const u8 {
-    const instr: SingleDataTransferInstruction = @bitCast(instruction);
-
-    const cond = disassemble_condition(instr.cond);
-    const expr = "[TODO]"; // TODO
-
-    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s}{s} r{d},{s}{s}", .{
-        if (instr.l == 0) "ltr" else "str",
-        cond,
-        if (instr.b == 1) "b" else "",
-        if (instr.w == 1 and instr.p == 1) "t" else "", // FIXME: I don't how it works yet.
-        instr.rd,
-        expr,
-        if (instr.w == 1) "!" else "",
-    }) catch unreachable;
-}
-
-fn disassemble_single_data_swap(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "SingleDataSwap";
-}
-
-fn disassemble_multiply(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "Multiply";
-}
-
-fn disassemble_multiply_long(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "MultiplyLong";
-}
-
-fn disassemble_halfword_data_transfer_register_offset(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "HalfwordDataTransferRegisterOffset";
-}
-
-fn disassemble_halfword_data_transfer_immediate_offset(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "HalfwordDataTransferImmediateOffset";
-}
-
-fn disassemble_coprocessor_data_transfer(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "CoprocessorDataTransfer";
-}
-
-fn disassemble_coprocessor_data_operation(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "CoprocessorDataOperation";
-}
-
-fn disassemble_coprocessor_register_transfer(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "CoprocessorRegisterTransfer";
-}
-
-fn disassemble_data_processing(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "DataProcessing";
-}
-
-fn disassemble_invalid(_: u32) []const u8 {
-    return "Invalid";
-}
-
-const disassemble_table = [_]*const fn (u32) []const u8{
-    disassemble_branch_and_exchange,
-    disassemble_block_data_transfer,
-    disassemble_branch,
-    disassemble_software_interrupt,
-    disassemble_undefined,
-    disassemble_single_data_transfer,
-    disassemble_single_data_swap,
-    disassemble_multiply,
-    disassemble_multiply_long,
-    disassemble_halfword_data_transfer_register_offset,
-    disassemble_halfword_data_transfer_immediate_offset,
-    disassemble_coprocessor_data_transfer,
-    disassemble_coprocessor_data_operation,
-    disassemble_coprocessor_register_transfer,
-    disassemble_data_processing,
-
-    disassemble_invalid,
-};
-
-var JumpTable: [0x1000]u8 = undefined;
+pub var JumpTable: [0x1000]u8 = undefined;
 
 // Generic ARM7 Core
 // T: 16bit Thumb
@@ -471,13 +342,20 @@ var JumpTable: [0x1000]u8 = undefined;
 pub const ARM7 = struct {
     memory: []u8,
 
-    r: [16]u32 = undefined,
-    r_irq: [7]u32 = undefined,
-    r_svc: [2]u32 = undefined,
-    r_fiq: [2]u32 = undefined,
-    r_abt: [2]u32 = undefined,
-    r_und: [2]u32 = undefined,
-    spsr: u32 = undefined,
+    cpsr: CPSR = .{},
+    _r: [16]u32 = undefined,
+    r_fiq: [7]u32 = undefined, //  8-14
+    r_svc: [2]u32 = undefined, // 13-14
+    r_irq: [2]u32 = undefined, // 13-14
+    r_abt: [2]u32 = undefined, // 13-14
+    r_und: [2]u32 = undefined, // 13-14
+    spsr_irq: CPSR = .{},
+    spsr_svc: CPSR = .{},
+    spsr_fiq: CPSR = .{},
+    spsr_abt: CPSR = .{},
+    spsr_und: CPSR = .{},
+
+    instruction_pipeline: [2]u32 = undefined,
 
     fn init_jump_table() void {
         for (0..0x1000) |i| {
@@ -493,7 +371,7 @@ pub const ARM7 = struct {
             if (JumpTable[tag] == 255) {
                 std.debug.print("  {d: >6} {b:0>12}\n", .{ i, tag });
                 // @panic("Instruction tag not found");
-                JumpTable[tag] = disassemble_table.len - 1;
+                JumpTable[tag] = dissasemble.DisassembleTable.len - 1;
             }
         }
     }
@@ -503,23 +381,77 @@ pub const ARM7 = struct {
         return .{ .memory = memory };
     }
 
-    pub inline fn pc(self: *@This()) *u32 {
-        return &self.r[15];
+    pub inline fn r(self: *@This(), index: u5) *u32 {
+        // NOTE: We could only use _r and actually swap value when the mode change. Worth testing later.
+        return switch (self.cpsr.m) {
+            .User, .System => &self._r[index],
+            .FastInterrupt => if (index >= 8 and index <= 14) &self.r_fiq[index - 8] else &self._r[index],
+            .Interrupt => if (index >= 13 and index <= 14) &self.r_irq[index - 13] else &self._r[index],
+            .Supervisor => if (index >= 13 and index <= 14) &self.r_svc[index - 13] else &self._r[index],
+            .Abort => if (index >= 13 and index <= 14) &self.r_abt[index - 13] else &self._r[index],
+            .Undefined => if (index >= 13 and index <= 14) &self.r_und[index - 13] else &self._r[index],
+        };
     }
 
-    fn get_instr_tag(instruction: u32) u12 {
+    // Stack Pointer
+    pub inline fn sp(self: *@This()) *u32 {
+        return self.r(13);
+    }
+
+    // Link Register
+    pub inline fn lr(self: *@This()) *u32 {
+        return self.r(14);
+    }
+
+    // Program Counter
+    pub inline fn pc(self: *@This()) *u32 {
+        return self.r(15);
+    }
+
+    pub inline fn spsr(self: *@This()) *CPSR {
+        return switch (self.cpsr.m) {
+            .User, .System => @panic("Attempt to access SPSR in User/System mode"),
+            .FastInterrupt => &self.spsr_fiq,
+            .Interrupt => &self.spsr_irq,
+            .Supervisor => &self.spsr_svc,
+            .Abort => &self.spsr_abt,
+            .Undefined => &self.spsr_und,
+        };
+    }
+
+    inline fn get_instr_tag(instruction: u32) u12 {
         return @truncate(((instruction >> 16) & 0xFF0) | ((instruction >> 4) & 0xF));
     }
 
-    pub fn fetch(self: *@This()) Instruction {
-        const r = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc().*]))).*;
+    pub fn fetch(self: *@This()) u32 {
+        const instr = self.read(u32, self.pc().*);
         self.pc().* += 4;
-        return @bitCast(r);
+        return instr;
     }
 
     fn decode() void {}
 
-    pub fn disassemble(instr: Instruction) []const u8 {
-        return disassemble_table[JumpTable[@This().get_instr_tag(@bitCast(instr))]](@bitCast(instr));
+    fn execute(self: *@This(), instr: u32) void {
+        const tag = get_instr_tag(instr);
+        interpreter.InstructionHandlers[JumpTable[tag]](self, instr);
+    }
+
+    pub fn reset_pipeline(self: *@This()) void {
+        self.instruction_pipeline[0] = self.fetch();
+        self.instruction_pipeline[1] = self.fetch();
+    }
+
+    pub fn tick(self: *@This()) void {
+        self.execute(self.instruction_pipeline[0]);
+        self.instruction_pipeline[0] = self.instruction_pipeline[1];
+        self.instruction_pipeline[1] = self.fetch();
+    }
+
+    pub fn read(self: *@This(), comptime T: type, address: u32) T {
+        return @as(*const T, @alignCast(@ptrCast(&self.memory[address]))).*;
+    }
+
+    pub fn disassemble(instr: u32) []const u8 {
+        return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
     }
 };
