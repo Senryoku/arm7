@@ -24,21 +24,10 @@ pub fn main() !void {
     _ = read_bytes;
 
     core.pc().* = 0;
-
-    for (0..32) |_| {
-        const instr = core.fetch();
-        //std.debug.print("{X:0>8}: {b:0>32}\n", .{ @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)) });
-        //std.debug.print("{X:0>8}: {s}\n", .{ @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
-        std.debug.print("{X:0>8}: {b:0>32} {s}\n", .{ @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
-    }
-
-    std.debug.print("------------------------------------\n", .{});
-
-    core.pc().* = 0;
     core.reset_pipeline();
-    for (0..32) |_| {
+    for (0..64) |_| {
         const instr = core.instruction_pipeline[0];
-        std.debug.print("{X:0>8}: {b:0>32} {s}\n", .{ @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
+        std.debug.print("[{X:0>8}] {X:0>8}: {b:0>32} {s}\n", .{ core.pc().* - 8, @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
         core.tick();
     }
 }

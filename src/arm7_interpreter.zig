@@ -23,21 +23,54 @@ pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32)
     handle_invalid,
 };
 
-inline fn handle_condition(cpu: *arm7.ARM7, cond: u4) bool {
-    _ = cond;
-    _ = cpu;
-
+inline fn handle_condition(cpu: *arm7.ARM7, cond: arm7.Condition) bool {
+    switch (cond) {
+        .EQ => return cpu.cpsr.z,
+        .NE => return !cpu.cpsr.z,
+        .CS => return cpu.cpsr.c,
+        .CC => return !cpu.cpsr.c,
+        .MI => return cpu.cpsr.n,
+        .PL => return !cpu.cpsr.n,
+        .VS => return cpu.cpsr.v,
+        .VC => return !cpu.cpsr.v,
+        .HI => return cpu.cpsr.c and !cpu.cpsr.z,
+        .LS => return !cpu.cpsr.c or cpu.cpsr.z,
+        .GE => return cpu.cpsr.n == cpu.cpsr.v,
+        .LT => return cpu.cpsr.n != cpu.cpsr.v,
+        .GT => return !cpu.cpsr.z and (cpu.cpsr.n == cpu.cpsr.v),
+        .LE => return cpu.cpsr.z or (cpu.cpsr.n != cpu.cpsr.v),
+        .AL => return true,
+        .Invalid => unreachable,
+    }
     return true;
 }
 
+pub const LogicalShift = enum(u2) {
+    LSL = 0b00,
+    LSR = 0b01,
+    ASR = 0b10,
+    ROR = 0b11, // or RRX
+};
+
+pub const ScaledRegisterOffset = packed struct(u12) {
+    rm: u4,
+    _: u1 = 0,
+    shift: LogicalShift,
+    shift_imm: u5,
+};
+
 fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
-    _ = cpu;
-    _ = instruction;
+    const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
+    if (!handle_condition(cpu, inst.cond))
+        return;
+    @panic("Unimplemented branch and exchange");
 }
 
 fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
-    _ = cpu;
-    _ = instruction;
+    const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
+    if (!handle_condition(cpu, inst.cond))
+        return;
+    @panic("Unimplemented block data transfer");
 }
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
@@ -66,66 +99,116 @@ fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SoftwareInterruptInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented software interrupt");
 }
 
 fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.UndefinedInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+    @panic("Undefined instruction");
 }
 
 fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataTransferInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
+
+    var offset: u32 = inst.offset;
+    if (inst.i == 0) {
+        const sro: ScaledRegisterOffset = @bitCast(inst.offset);
+        std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
+        offset = switch (sro.shift) {
+            .LSL => cpu.r(sro.rm).* << sro.shift_imm,
+            .LSR => if (sro.shift_imm == 0) 0 else cpu.r(sro.rm).* >> sro.shift_imm,
+            .ASR => if (sro.shift_imm == 0) (if (cpu.r(sro.rm).* & 0x80000000 != 0) 0xFFFFFFFF else 0) else cpu.r(sro.rm).* >> sro.shift_imm, // FIXME: This is an "arithmetic shift right", don't know what that means yet. Does it update flags?
+            .ROR => if (sro.shift_imm == 0) ((@as(u32, (if (cpu.cpsr.c) 1 else 0)) << 31) | (cpu.r(sro.rm).* >> 1)) else std.math.rotr(u32, cpu.r(sro.rm).*, sro.shift_imm),
+        };
+    }
+
+    const base = cpu.r(inst.rn).*;
+
+    const offset_addr = if (inst.u == 1) base + offset else base - offset;
+
+    const addr = if (inst.p == 1) offset_addr else base;
+
+    // When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
+    // FIXME: I think it's +8 with the current implementation? Maybe?
+
+    if (inst.l == 0) {
+        cpu.r(inst.rd).* = cpu.read(u32, addr);
+    } else {
+        cpu.write(u32, addr, cpu.r(inst.rd).*);
+    }
+
+    if (inst.w == 1) cpu.r(inst.rn).* = offset_addr;
 }
 
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented single data swap");
 }
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MultiplyInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented multiply");
 }
 
 fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MultiplyLongInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented multiply long");
 }
 
 fn handle_halfword_data_transfer_register_offset(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.HalfwordDataTransferRegisterOffsetInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented halfword data transfer register offset");
 }
 
 fn handle_halfword_data_transfer_immediate_offset(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.HalfwordDataTransferImmediateOffsetInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented halfword data transfer immediate offset");
 }
 
 fn handle_coprocessor_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.CoprocessorDataTransferInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented coprocessor data transfer");
 }
 
 fn handle_coprocessor_data_operation(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.CoprocessorDataOperationInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented coprocessor data operation");
 }
 
 fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.CoprocessorRegisterTransferInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    @panic("Unimplemented coprocessor register transfer");
 }
 
 inline fn n_flag(v: u32) bool {
@@ -173,8 +256,9 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
     else
         operand_2_immediate(cpu, inst.operand2);
 
-    const op2 = shifter_result.shifter_operand;
+    var op2 = shifter_result.shifter_operand;
 
+    // TODO: Yes, this can and must be refactored.
     switch (inst.opcode) {
         .AND => {
             cpu.r(inst.rd).* = op1 & op2;
@@ -231,6 +315,83 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
                 cpu.cpsr.v = overflow_from_add(op1, op2);
             }
         },
+        .ADC => {
+            op2 += if (cpu.cpsr.c) 1 else 0; // FIXME: What if it overflows here?
+            cpu.r(inst.rd).* = op1 +% op2;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = carry_from(op1, op2);
+                cpu.cpsr.v = overflow_from_add(op1, op2);
+            }
+        },
+        .SBC => {
+            op2 += if (cpu.cpsr.c) 1 else 0; // FIXME: What if it overflows here?
+            cpu.r(inst.rd).* = op1 -% op2;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = !borrow_from(op1, op2);
+                cpu.cpsr.v = overflow_from_sub(op1, op2);
+            }
+        },
+        .RSC => {
+            const op1_c = op1 + if (cpu.cpsr.c) @as(u32, 1) else 0; // FIXME: What if it overflows here?
+            cpu.r(inst.rd).* = op2 -% op1_c;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = !borrow_from(op2, op1_c);
+                cpu.cpsr.v = overflow_from_sub(op2, op1_c);
+            }
+        },
+        .TST => {
+            const r = op1 & op2;
+            std.debug.assert(inst.s == 1);
+            cpu.cpsr.n = n_flag(r);
+            cpu.cpsr.z = r == 0;
+            cpu.cpsr.c = shifter_result.shifter_carry_out;
+        },
+        .TEQ => {
+            const r = op1 ^ op2;
+            std.debug.assert(inst.s == 1);
+            cpu.cpsr.n = n_flag(r);
+            cpu.cpsr.z = r == 0;
+            cpu.cpsr.c = shifter_result.shifter_carry_out;
+        },
+        .CMP => {
+            const r = op1 -% op2;
+            std.debug.assert(inst.s == 1);
+            cpu.cpsr.n = n_flag(r);
+            cpu.cpsr.z = r == 0;
+            cpu.cpsr.c = !borrow_from(op1, op2);
+            cpu.cpsr.v = overflow_from_sub(op1, op2);
+        },
+        .CMN => {
+            const r = op1 +% op2;
+            std.debug.assert(inst.s == 1);
+            cpu.cpsr.n = n_flag(r);
+            cpu.cpsr.z = r == 0;
+            cpu.cpsr.c = carry_from(op1, op2);
+            cpu.cpsr.v = overflow_from_add(op1, op2);
+        },
+        .ORR => {
+            cpu.r(inst.rd).* = op1 | op2;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = shifter_result.shifter_carry_out;
+                // V Unaffected
+            }
+        },
         .MOV => {
             cpu.r(inst.rd).* = op2;
             if (inst.s == 1 and inst.rd == 15) {
@@ -242,16 +403,27 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
                 // V Unaffected
             }
         },
-        .CMP => {
-            const r = op1 -% op2;
-            std.debug.assert(inst.s == 1);
-            cpu.cpsr.n = n_flag(r);
-            cpu.cpsr.z = r == 0;
-            cpu.cpsr.c = !borrow_from(op1, op2);
-            cpu.cpsr.v = overflow_from_sub(op1, op2);
+        .BIC => {
+            cpu.r(inst.rd).* = op1 & ~op2;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = shifter_result.shifter_carry_out;
+                // V Unaffected
+            }
         },
-        else => {
-            arm7_interpreter_log.warn("DataProcessing: Unhandled opcode {any}", .{inst.opcode});
+        .MVN => {
+            cpu.r(inst.rd).* = ~op2;
+            if (inst.s == 1 and inst.rd == 15) {
+                cpu.cpsr = cpu.spsr().*;
+            } else if (inst.s == 1) {
+                cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+                cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+                cpu.cpsr.c = shifter_result.shifter_carry_out;
+                // V Unaffected
+            }
         },
     }
 }

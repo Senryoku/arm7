@@ -29,6 +29,25 @@ pub const CPSR = packed struct(u32) {
 const DataProcessingInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_0000_0000;
 const DataProcessingInstructionMask: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
 
+pub const Condition = enum(u4) {
+    EQ = 0b0000,
+    NE = 0b0001,
+    CS = 0b0010,
+    CC = 0b0011,
+    MI = 0b0100,
+    PL = 0b0101,
+    VS = 0b0110,
+    VC = 0b0111,
+    HI = 0b1000,
+    LS = 0b1001,
+    GE = 0b1010,
+    LT = 0b1011,
+    GT = 0b1100,
+    LE = 0b1101,
+    AL = 0b1110,
+    Invalid = 0b1111,
+};
+
 pub const Opcode = enum(u4) {
     AND = 0b0000, // operand1 AND operand2
     EOR = 0b0001, // operand1 EOR operand2
@@ -56,7 +75,7 @@ pub const DataProcessingInstruction = packed struct(u32) {
     opcode: Opcode,
     i: u1,
     tag: u2,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const MultiplyInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
@@ -71,7 +90,7 @@ pub const MultiplyInstruction = packed struct(u32) {
     s: u1,
     a: u1,
     _tag: u6,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const MultiplyLongInstructionTags: u32 = 0b0000_0000_1000_0000_0000_0000_1001_0000;
@@ -87,7 +106,7 @@ pub const MultiplyLongInstruction = packed struct(u32) {
     a: u1,
     u: u1,
     _tag: u5,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const SingleDataSwapInstructionTags: u32 = 0b0000_0001_0000_0000_0000_0000_1001_0000;
@@ -101,7 +120,7 @@ pub const SingleDataSwapInstruction = packed struct(u32) {
     _tag2: u2,
     u: u1,
     _tag: u5,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const BranchAndExchangeInstructionTags: u32 = 0b0000_0001_0010_1111_1111_1111_0001_0000;
@@ -110,7 +129,7 @@ pub const BranchAndExchangeInstructionMask: u32 = 0b0000_1111_1111_1111_1111_111
 pub const BranchAndExchangeInstruction = packed struct(u32) {
     rm: u4,
     _tag: u24,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const HalfwordDataTransferRegisterOffsetInstructionTags: u32 = 0b0000_0000_0000_0000_0000_0000_1001_0000;
@@ -130,7 +149,7 @@ pub const HalfwordDataTransferRegisterOffsetInstruction = packed struct(u32) {
     u: u1,
     p: u1,
     _tag: u3,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const HalfwordDataTransferImmediateOffsetInstructionTags: u32 = 0b0000_0000_0100_0000_0000_0000_1001_0000;
@@ -151,7 +170,7 @@ pub const HalfwordDataTransferImmediateOffsetInstruction = packed struct(u32) {
     u: u1,
     p: u1,
     _tag: u3,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const SingleDataTransferInstructionTags: u32 = 0b0000_0100_0000_0000_0000_0000_0000_0000;
@@ -168,7 +187,7 @@ pub const SingleDataTransferInstruction = packed struct(u32) {
     p: u1,
     i: u1,
     _tag: u2,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const UndefinedInstructionTags: u32 = 0b0000_0110_0000_0000_0000_0000_0001_0000;
@@ -176,7 +195,7 @@ pub const UndefinedInstructionMask: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0
 
 pub const UndefinedInstruction = packed struct(u32) {
     _: u28,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const BlockDataTransferInstructionTags: u32 = 0b0000_1000_0000_0000_0000_0000_0000_0000;
@@ -191,7 +210,7 @@ pub const BlockDataTransferInstruction = packed struct(u32) {
     u: u1,
     p: u1,
     _tag: u3,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const BranchInstructionTags: u32 = 0b0000_1010_0000_0000_0000_0000_0000_0000;
@@ -201,7 +220,7 @@ pub const BranchInstruction = packed struct(u32) {
     offset: u24,
     l: u1,
     _tag: u3,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const CoprocessorDataTransferInstructionTags: u32 = 0b0000_1100_0000_0000_0000_0000_0000_0000;
@@ -220,7 +239,7 @@ pub const CoprocessorDataTransferInstruction = packed struct(u32) {
     u: u1,
     p: u1,
     _tag: u3,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const CoprocessorDataOperationInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0000_0000;
@@ -235,7 +254,7 @@ pub const CoprocessorDataOperationInstruction = packed struct(u32) {
     crn: u4,
     cp_opc: u4,
     _tag: u4,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const CoprocessorRegisterTransferInstructionTags: u32 = 0b0000_1110_0000_0000_0000_0000_0001_0000;
@@ -251,7 +270,7 @@ pub const CoprocessorRegisterTransferInstruction = packed struct(u32) {
     l: u1,
     cp_opc: u3,
     _tag: u4,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const SoftwareInterruptInstructionTags: u32 = 0b0000_1111_0000_0000_0000_0000_0000_0000;
@@ -259,7 +278,7 @@ pub const SoftwareInterruptInstructionMask: u32 = 0b0000_1111_0000_0000_0000_000
 
 pub const SoftwareInterruptInstruction = packed struct(u32) {
     _: u28,
-    cond: u4,
+    cond: Condition,
 };
 
 pub const Instruction = packed union {
@@ -447,8 +466,12 @@ pub const ARM7 = struct {
         self.instruction_pipeline[1] = self.fetch();
     }
 
-    pub fn read(self: *@This(), comptime T: type, address: u32) T {
+    pub fn read(self: *const @This(), comptime T: type, address: u32) T {
         return @as(*const T, @alignCast(@ptrCast(&self.memory[address]))).*;
+    }
+
+    pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
+        @as(*T, @alignCast(@ptrCast(&self.memory[address]))).* = value;
     }
 
     pub fn disassemble(instr: u32) []const u8 {
