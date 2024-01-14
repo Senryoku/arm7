@@ -262,14 +262,14 @@ pub const CoprocessorRegisterTransferInstructionMask: u32 = 0b0000_1111_0000_000
 
 pub const CoprocessorRegisterTransferInstruction = packed struct(u32) {
     crm: u4,
-    _tag2: u1,
+    _tag1: u1,
     cp: u3,
     cpn: u4,
     crd: u4,
     crn: u4,
     l: u1,
     cp_opc: u3,
-    _tag: u4,
+    _tag2: u4,
     cond: Condition,
 };
 
@@ -278,6 +278,41 @@ pub const SoftwareInterruptInstructionMask: u32 = 0b0000_1111_0000_0000_0000_000
 
 pub const SoftwareInterruptInstruction = packed struct(u32) {
     _: u28,
+    cond: Condition,
+};
+
+pub const MRSInstructionTags: u32 = 0b0000_0001_0000_0000_0000_0000_0000_0000;
+pub const MRSInstructionMask: u32 = 0b0000_1111_1011_0000_0000_0000_0000_0000;
+
+pub const MRSInstruction = packed struct(u32) {
+    sbz: u12,
+    rd: u4,
+    sbo: u4,
+    _tag1: u2,
+    r: u1,
+    _tag2: u5,
+    cond: Condition,
+};
+
+pub const MSRInstructionTags: u32 = 0b0000_0001_0010_0000_0000_0000_0000_0000;
+pub const MSRInstructionMask: u32 = 0b0000_1101_1011_0000_0000_0000_0000_0000;
+
+pub const FieldMask = packed struct(u4) {
+    c: u1,
+    x: u1,
+    s: u1,
+    f: u1,
+};
+
+pub const MSRInstruction = packed struct(u32) {
+    source_operand: u12,
+    sbo: u4,
+    field_mask: FieldMask,
+    _tag1: u2,
+    r: u1,
+    _tag2: u2,
+    i: u1,
+    _tag3: u2,
     cond: Condition,
 };
 
@@ -296,6 +331,8 @@ pub const Instruction = packed union {
     CoprocessorDataTransfer: CoprocessorDataTransferInstruction,
     CoprocessorDataOperation: CoprocessorDataOperationInstruction,
     CoprocessorRegisterTransfer: CoprocessorRegisterTransferInstruction,
+    MRS: MRSInstruction,
+    MSR: MSRInstruction,
     SoftwareInterrupt: SoftwareInterruptInstruction,
 };
 
@@ -314,6 +351,8 @@ pub const InstructionMasks = [_]u32{
     CoprocessorDataTransferInstructionMask,
     CoprocessorDataOperationInstructionMask,
     CoprocessorRegisterTransferInstructionMask,
+    MRSInstructionMask,
+    MSRInstructionMask,
     DataProcessingInstructionMask,
 };
 
@@ -332,6 +371,8 @@ pub const InstructionTags = [_]u32{
     CoprocessorDataTransferInstructionTags,
     CoprocessorDataOperationInstructionTags,
     CoprocessorRegisterTransferInstructionTags,
+    MRSInstructionTags,
+    MSRInstructionTags,
     DataProcessingInstructionTags,
 };
 

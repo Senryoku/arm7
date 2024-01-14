@@ -18,6 +18,8 @@ pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32)
     handle_coprocessor_data_transfer,
     handle_coprocessor_data_operation,
     handle_coprocessor_register_transfer,
+    handle_mrs,
+    handle_msr,
     handle_data_processing,
 
     handle_invalid,
@@ -213,6 +215,22 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
         return;
 
     @panic("Unimplemented coprocessor register transfer");
+}
+
+fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
+    const inst: arm7.MRSInstruction = @bitCast(instruction);
+    if (!handle_condition(cpu, inst.cond))
+        return;
+
+    @panic("Unimplemented MRSInstruction");
+}
+
+fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
+    const inst: arm7.MSRInstruction = @bitCast(instruction);
+    if (!handle_condition(cpu, inst.cond))
+        return;
+
+    @panic("Unimplemented MSRInstruction");
 }
 
 inline fn n_flag(v: u32) bool {

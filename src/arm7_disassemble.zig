@@ -165,6 +165,27 @@ fn disassemble_coprocessor_register_transfer(instruction: u32) []const u8 {
     return "CoprocessorRegisterTransfer";
 }
 
+fn disassemble_mrs(instruction: u32) []const u8 {
+    const inst: arm7.MRSInstruction = @bitCast(instruction);
+    const cond = disassemble_condition(inst.cond);
+    return std.fmt.bufPrint(&disassemble_temp, "mrs{s} {s}, {s}", .{ cond, disassemble_register(inst.rd), if (inst.r == 1) "SPSR" else "CPSR" }) catch unreachable;
+}
+
+fn disassemble_msr(instruction: u32) []const u8 {
+    const inst: arm7.MSRInstruction = @bitCast(instruction);
+    const cond = disassemble_condition(inst.cond);
+    const immediate = std.fmt.bufPrint(&disassemble_addr_mode_temp, "#{x}", .{arm7_interpreter.immediate_shifter_operand(inst.source_operand)}) catch unreachable;
+    return std.fmt.bufPrint(&disassemble_temp, "msr{s} {s}_{s}{s}{s}{s}, {s}", .{
+        cond,
+        if (inst.r == 1) "SPSR" else "CPSR",
+        if (inst.field_mask.c == 1) "c" else "",
+        if (inst.field_mask.x == 1) "x" else "",
+        if (inst.field_mask.s == 1) "s" else "",
+        if (inst.field_mask.f == 1) "f" else "",
+        if (inst.i == 1) immediate else disassemble_register(@truncate(inst.source_operand)),
+    }) catch unreachable;
+}
+
 fn disassemble_data_processing(instruction: u32) []const u8 {
     const instr: arm7.DataProcessingInstruction = @bitCast(instruction);
 
@@ -218,6 +239,8 @@ pub const DisassembleTable = [_]*const fn (u32) []const u8{
     disassemble_coprocessor_data_transfer,
     disassemble_coprocessor_data_operation,
     disassemble_coprocessor_register_transfer,
+    disassemble_mrs,
+    disassemble_msr,
     disassemble_data_processing,
 
     disassemble_invalid,
