@@ -515,4 +515,8 @@ pub const ARM7 = struct {
     pub fn disassemble(instr: u32) []const u8 {
         return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
     }
+
+    pub inline fn in_a_privileged_mode(self: *const @This()) bool {
+        return self.cpsr.m != .User;
+    }
 };

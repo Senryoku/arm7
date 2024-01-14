@@ -217,20 +217,45 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
     @panic("Unimplemented coprocessor register transfer");
 }
 
+// Move PSR to general-purpose register
 fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MRSInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    @panic("Unimplemented MRSInstruction");
+    if (inst.r == 1) {
+        cpu.r(inst.rd).* = @bitCast(cpu.spsr().*);
+    } else {
+        cpu.r(inst.rd).* = @bitCast(cpu.cpsr);
+    }
 }
 
+// Move to Status Register
 fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MSRInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    @panic("Unimplemented MSRInstruction");
+    const UnallocMask: u32 = 0x06F0FC00;
+    const UserMask: u32 = 0xF80F0200;
+    const PrivMask: u32 = 0x000001DF;
+    const StateMask: u32 = 0x01000020;
+
+    const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r(@truncate(inst.source_operand)).*;
+
+    std.debug.assert(operand & UnallocMask == 0);
+    const byte_mask: u32 = (if (inst.field_mask.c == 1) @as(u32, 0x000000FF) else 0x00000000) |
+        (if (inst.field_mask.x == 1) @as(u32, 0x0000FF00) else 0x00000000) |
+        (if (inst.field_mask.s == 1) @as(u32, 0x00FF0000) else 0x00000000) |
+        (if (inst.field_mask.f == 1) @as(u32, 0xFF000000) else 0x00000000);
+    if (inst.r == 0) {
+        std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
+        const mask = byte_mask & if (cpu.in_a_privileged_mode()) (UserMask | PrivMask) else UserMask;
+        cpu.cpsr = @bitCast((@as(u32, @bitCast(cpu.cpsr)) & ~mask) | (operand & mask));
+    } else {
+        const mask = byte_mask & (UserMask | PrivMask | StateMask);
+        cpu.spsr().* = @bitCast((@as(u32, @bitCast(cpu.spsr().*)) & ~mask) | (operand & mask));
+    }
 }
 
 inline fn n_flag(v: u32) bool {
