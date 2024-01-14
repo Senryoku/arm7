@@ -349,6 +349,25 @@ pub fn sign_extend_u26(val: u26) u32 {
 
 pub var JumpTable: [0x1000]u8 = undefined;
 
+fn init_jump_table() void {
+    for (0..0x1000) |i| {
+        const tag: u12 = @truncate(i);
+        JumpTable[tag] = 255;
+        for (0..InstructionTags.len) |t| {
+            if (tag & ARM7.get_instr_tag(InstructionMasks[t]) == ARM7.get_instr_tag(InstructionTags[t])) {
+                JumpTable[tag] = @intCast(t);
+                // Collision are expected, decoding order matters.
+                break;
+            }
+        }
+        if (JumpTable[tag] == 255) {
+            std.debug.print("  {d: >6} {b:0>12}\n", .{ i, tag });
+            // @panic("Instruction tag not found");
+            JumpTable[tag] = dissasemble.DisassembleTable.len - 1;
+        }
+    }
+}
+
 // Generic ARM7 Core
 // T: 16bit Thumb
 // D: JTAG Debug
@@ -375,25 +394,6 @@ pub const ARM7 = struct {
     spsr_und: CPSR = .{},
 
     instruction_pipeline: [2]u32 = undefined,
-
-    fn init_jump_table() void {
-        for (0..0x1000) |i| {
-            const tag: u12 = @truncate(i);
-            JumpTable[tag] = 255;
-            for (0..InstructionTags.len) |t| {
-                if (tag & get_instr_tag(InstructionMasks[t]) == get_instr_tag(InstructionTags[t])) {
-                    JumpTable[tag] = @intCast(t);
-                    // Collision are expected, decoding order matters.
-                    break;
-                }
-            }
-            if (JumpTable[tag] == 255) {
-                std.debug.print("  {d: >6} {b:0>12}\n", .{ i, tag });
-                // @panic("Instruction tag not found");
-                JumpTable[tag] = dissasemble.DisassembleTable.len - 1;
-            }
-        }
-    }
 
     pub fn init(memory: []u8) @This() {
         init_jump_table();

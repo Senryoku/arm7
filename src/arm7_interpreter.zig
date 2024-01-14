@@ -118,7 +118,7 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
 
     var offset: u32 = inst.offset;
-    if (inst.i == 0) {
+    if (inst.i == 1) {
         const sro: ScaledRegisterOffset = @bitCast(inst.offset);
         std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
         offset = switch (sro.shift) {
@@ -138,10 +138,18 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
     // FIXME: I think it's +8 with the current implementation? Maybe?
 
-    if (inst.l == 0) {
-        cpu.r(inst.rd).* = cpu.read(u32, addr);
+    if (inst.b == 1) {
+        if (inst.l == 0) {
+            cpu.r(inst.rd).* = cpu.read(u32, addr);
+        } else {
+            cpu.write(u32, addr, cpu.r(inst.rd).*);
+        }
     } else {
-        cpu.write(u32, addr, cpu.r(inst.rd).*);
+        if (inst.l == 0) {
+            cpu.r(inst.rd).* = cpu.read(u8, addr);
+        } else {
+            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*));
+        }
     }
 
     if (inst.w == 1) cpu.r(inst.rn).* = offset_addr;
@@ -451,7 +459,7 @@ pub inline fn operand_2_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifter_
 
 pub inline fn immediate_shifter_operand(operand2: u12) u32 {
     const rotate_imm = operand2 >> 8;
-    return std.math.rotr(u32, arm7.zero_extend(operand2 & 0xFF), rotate_imm);
+    return std.math.rotr(u32, arm7.zero_extend(operand2 & 0xFF), 2 * rotate_imm);
 }
 
 pub inline fn operand_2_immediate(cpu: *arm7.ARM7, operand2: u12) barrel_shifter_result {

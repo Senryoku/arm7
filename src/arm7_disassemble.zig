@@ -50,8 +50,12 @@ fn disassemble_condition(cond: arm7.Condition) []const u8 {
 
 fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 {
     const sign = if (inst.u == 1) "" else "-";
-    if (inst.i == 1) {
-        return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}, #{s}{X:0>3}]", .{ inst.rn, sign, inst.offset }) catch unreachable;
+    if (inst.i == 0) {
+        if (inst.offset == 0) {
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}]", .{inst.rn}) catch unreachable;
+        } else {
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}, #{s}{X:0>3}]", .{ inst.rn, sign, inst.offset }) catch unreachable;
+        }
     } else {
         const sro: arm7_interpreter.ScaledRegisterOffset = @bitCast(inst.offset);
         if (sro.shift == .LSL and sro.shift_imm == 0) {
