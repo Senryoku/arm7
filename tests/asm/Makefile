@@ -19,3 +19,4 @@ basic.bin: basic.elf
 		$(ARM_OBJCOPY) -O binary -j .text -j .data -j .bss -j .rodata --set-section-flags .data=alloc,load,contents basic.elf basic.bin
 		rm basic.o
 		rm basic.elf
+		mv basic.bin ../bin/basic.bin

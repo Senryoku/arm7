@@ -78,7 +78,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    const offset = arm7.sign_extend_u26(@as(u26, inst.offset) << 2) + 8;
+    const offset = arm7.sign_extend_u26(inst.offset) << 2; // NOTE: The value in PC in actually this instruction address + 8 (due to pipelining)
 
     // Branch with link
     // Saves PC to R14 (LR)
@@ -92,7 +92,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.pc().* += offset;
     }
 
-    cpu.reset_pipeline();
+    cpu.flush_pipeline();
 }
 
 fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
@@ -138,18 +138,14 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
     // FIXME: I think it's +8 with the current implementation? Maybe?
 
-    if (inst.b == 1) {
-        if (inst.l == 0) {
-            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*));
-        } else {
-            cpu.r(inst.rd).* = cpu.read(u8, addr);
-        }
-    } else {
-        if (inst.l == 0) {
+    if (inst.l == 0) {
+        if (inst.b == 1)
+            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*))
+        else
             cpu.write(u32, addr, cpu.r(inst.rd).*);
-        } else {
-            cpu.r(inst.rd).* = cpu.read(u32, addr);
-        }
+    } else {
+        cpu.r(inst.rd).* = if (inst.b == 1) cpu.read(u8, addr) else cpu.read(u32, addr);
+        if (inst.rd == 15) cpu.flush_pipeline();
     }
 
     if (inst.w == 1) cpu.r(inst.rn).* = offset_addr;
@@ -433,6 +429,12 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
                 // V Unaffected
             }
         },
+    }
+
+    // If PC as been written to, flush pipeline and refill it.
+    switch (inst.opcode) {
+        .TST, .TEQ, .CMP, .CMN => {},
+        else => if (inst.rd == 15) cpu.flush_pipeline(),
     }
 }
 

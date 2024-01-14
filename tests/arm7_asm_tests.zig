@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const arm7 = @import("arm7.zig");
-const arm7_interpreter = @import("arm7_interpreter.zig");
-const arm7_disassemble = @import("arm7_disassemble.zig");
+const arm7 = @import("arm7");
+const arm7_interpreter = @import("../arm7_interpreter.zig");
+const arm7_disassemble = @import("../arm7_disassemble.zig");
 
-const test_program = @embedFile("tests/basic.bin");
+const test_program = @embedFile("bin/basic.bin");
 
 fn disassemble_current_instruction(cpu: *arm7.ARM7) void {
     std.debug.print("[{X:0>8}] {X:0>8} {s}\n", .{ cpu.pc().* - 8, cpu.instruction_pipeline[0], arm7.ARM7.disassemble(cpu.instruction_pipeline[0]) });

@@ -39,6 +39,26 @@
 			"cwd": "${workspaceFolder}",
 			"environment": [],
 			"preLaunchTask": "build"
+		},
+		{
+			"name": "Debug armwrestler-dc",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/zig-out/bin/armwrestler_dc.exe",
+			"args": [],
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"preLaunchTask": "build-armwrestler_dc"
+		},
+		{
+			"name": "Debug arm7_asm_tests",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/zig-out/bin/arm7_asm_tests.exe",
+			"args": [],
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"preLaunchTask": "build-arm7_asm_tests"
 		}
 	]
 }

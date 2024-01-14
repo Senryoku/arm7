@@ -23,70 +23,46 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
     b.installArtifact(lib);
 
-    const exe = b.addExecutable(.{
-        .name = "arm7",
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // This declares intent for the executable to be installed into the
-    // standard location when the user invokes the "install" step (the default
-    // step when running `zig build`).
-    b.installArtifact(exe);
-
-    // This *creates* a Run step in the build graph, to be executed when another
-    // step is evaluated that depends on it. The next line below will establish
-    // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
-
-    // By making the run step depend on the install step, it will be run from the
-    // installation directory rather than directly from within the cache directory.
-    // This is not necessary, however, if the application depends on other installed
-    // files, this ensures they will be present and in the expected location.
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    // This creates a build step. It will be visible in the `zig build --help` menu,
-    // and can be selected like this: `zig build run`
-    // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    const arm7_module = b.createModule(.{ .source_file = .{ .path = "src/arm7.zig" } });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
+        .name = "arm7_tests",
         .root_source_file = .{ .path = "src/arm7.zig" },
         .target = target,
         .optimize = optimize,
     });
-
+    b.installArtifact(lib_unit_tests);
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/arm7_tests.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    b.installArtifact(exe_unit_tests);
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
+    const run_asm_tests = add_test(b, "arm7_asm_tests", "tests/arm7_asm_tests.zig", arm7_module);
+    const run_armwrestler_dc_tests = add_test(b, "armwrestler_dc", "tests/armwrestler_dc.zig", arm7_module);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_exe_unit_tests.step);
+    test_step.dependOn(&run_asm_tests.step);
+    test_step.dependOn(&run_armwrestler_dc_tests.step);
+}
+
+fn add_test(b: *std.Build, comptime name: []const u8, comptime entry: []const u8, arm7_module: *std.Build.Module) *std.Build.Step.Run {
+    const exe = b.addTest(.{
+        .name = name,
+        .root_source_file = .{ .path = entry },
+        .target = .{},
+        .optimize = .Debug,
+    });
+    exe.addModule("arm7", arm7_module);
+
+    const install_step = b.step(name, "Install " ++ name ++ " for debugging");
+    install_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    return b.addRunArtifact(exe);
 }

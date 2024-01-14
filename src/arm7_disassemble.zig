@@ -52,16 +52,16 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
     const sign = if (inst.u == 1) "" else "-";
     if (inst.i == 0) {
         if (inst.offset == 0) {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}]", .{inst.rn}) catch unreachable;
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}]", .{disassemble_register(inst.rn)}) catch unreachable;
         } else {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}, #{s}{X:0>3}]", .{ inst.rn, sign, inst.offset }) catch unreachable;
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}{X:0>3}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
         }
     } else {
         const sro: arm7_interpreter.ScaledRegisterOffset = @bitCast(inst.offset);
         if (sro.shift == .LSL and sro.shift_imm == 0) {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}, {s}R{d}]", .{ inst.rn, sign, sro.rm }) catch unreachable;
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}]", .{ disassemble_register(inst.rn), sign, disassemble_register(sro.rm) }) catch unreachable;
         } else {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[R{d}, {s}R{d}, {s} #{d}]", .{ inst.rn, sign, sro.rm, @tagName(sro.shift), sro.shift_imm }) catch unreachable;
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}, {s} #{d}]", .{ disassemble_register(inst.rn), sign, disassemble_register(sro.rm), @tagName(sro.shift), sro.shift_imm }) catch unreachable;
         }
     }
     return "[TODO]";
@@ -82,14 +82,10 @@ fn disassemble_block_data_transfer(instruction: u32) []const u8 {
 fn disassemble_branch(instruction: u32) []const u8 {
     const inst: arm7.BranchInstruction = @bitCast(instruction);
 
-    const offset = arm7.sign_extend_u26(@as(u26, inst.offset) << 2) + 8; // FIXME: This is PC relative.
+    const offset = (arm7.sign_extend_u26(inst.offset) << 2) + 8; // FIXME: This is PC relative.
     const cond = disassemble_condition(inst.cond);
 
-    if (inst.l == 0) {
-        return std.fmt.bufPrint(&disassemble_temp, "b{s} 0x{x}", .{ cond, offset }) catch unreachable;
-    } else {
-        return std.fmt.bufPrint(&disassemble_temp, "bl{s} 0x{x}", .{ cond, offset }) catch unreachable;
-    }
+    return std.fmt.bufPrint(&disassemble_temp, "b{s}{s} 0x{x}", .{ if (inst.l == 0) "" else "l", cond, offset }) catch unreachable;
 }
 
 fn disassemble_software_interrupt(instruction: u32) []const u8 {
@@ -174,7 +170,7 @@ fn disassemble_data_processing(instruction: u32) []const u8 {
 
     var op2_buf: [32]u8 = undefined;
     const op2 = (if (instr.i == 0)
-        std.fmt.bufPrint(&op2_buf, "R{d},{d}", .{ instr.operand2 & 0xF, instr.operand2 >> 7 })
+        std.fmt.bufPrint(&op2_buf, "{s},{d}", .{ disassemble_register(@truncate(instr.operand2 & 0xF)), instr.operand2 >> 7 })
     else
         std.fmt.bufPrint(&op2_buf, "#{X:0>3}", .{arm7_interpreter.immediate_shifter_operand(instr.operand2)})) catch unreachable;
 
