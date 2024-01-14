@@ -140,15 +140,15 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     if (inst.b == 1) {
         if (inst.l == 0) {
-            cpu.r(inst.rd).* = cpu.read(u32, addr);
+            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*));
         } else {
-            cpu.write(u32, addr, cpu.r(inst.rd).*);
+            cpu.r(inst.rd).* = cpu.read(u8, addr);
         }
     } else {
         if (inst.l == 0) {
-            cpu.r(inst.rd).* = cpu.read(u8, addr);
+            cpu.write(u32, addr, cpu.r(inst.rd).*);
         } else {
-            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*));
+            cpu.r(inst.rd).* = cpu.read(u32, addr);
         }
     }
 
