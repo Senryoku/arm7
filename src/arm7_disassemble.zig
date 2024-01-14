@@ -48,6 +48,27 @@ fn disassemble_condition(cond: arm7.Condition) []const u8 {
     };
 }
 
+fn disassemble_opcode(opcode: arm7.Opcode) []const u8 {
+    return switch (opcode) {
+        .AND => "and",
+        .EOR => "eor",
+        .SUB => "sub",
+        .RSB => "rsb",
+        .ADD => "add",
+        .ADC => "adc",
+        .SBC => "sbc",
+        .RSC => "rsc",
+        .TST => "tst",
+        .TEQ => "teq",
+        .CMP => "cmp",
+        .CMN => "cmn",
+        .ORR => "orr",
+        .MOV => "mov",
+        .BIC => "bic",
+        .MVN => "mvn",
+    };
+}
+
 fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 {
     const sign = if (inst.u == 1) "" else "-";
     if (inst.i == 0) {
@@ -82,7 +103,7 @@ fn disassemble_block_data_transfer(instruction: u32) []const u8 {
 fn disassemble_branch(instruction: u32) []const u8 {
     const inst: arm7.BranchInstruction = @bitCast(instruction);
 
-    const offset = (arm7.sign_extend_u26(inst.offset) << 2) + 8; // FIXME: This is PC relative.
+    const offset = (arm7.sign_extend(@TypeOf(inst.offset), inst.offset) << 2) + 8; // FIXME: This is PC relative, and signed.
     const cond = disassemble_condition(inst.cond);
 
     return std.fmt.bufPrint(&disassemble_temp, "b{s}{s} 0x{x}", .{ if (inst.l == 0) "" else "l", cond, offset }) catch unreachable;
@@ -197,20 +218,20 @@ fn disassemble_data_processing(instruction: u32) []const u8 {
 
     return switch (instr.opcode) {
         .MOV, .MVN => std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s},{s}", .{
-            @tagName(instr.opcode),
+            disassemble_opcode(instr.opcode),
             disassemble_condition(instr.cond),
             if (instr.s == 1) "S" else "",
             disassemble_register(instr.rd),
             op2,
         }),
         .CMP, .CMN, .TEQ, .TST => std.fmt.bufPrint(&disassemble_temp, "{s}{s} {s},{s}", .{
-            @tagName(instr.opcode),
+            disassemble_opcode(instr.opcode),
             disassemble_condition(instr.cond),
             disassemble_register(instr.rn),
             op2,
         }),
         else => std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s},{s},{s}", .{
-            @tagName(instr.opcode),
+            disassemble_opcode(instr.opcode),
             disassemble_condition(instr.cond),
             if (instr.s == 1) "S" else "",
             disassemble_register(instr.rd),

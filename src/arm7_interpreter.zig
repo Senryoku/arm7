@@ -80,7 +80,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    const offset = arm7.sign_extend_u26(inst.offset) << 2; // NOTE: The value in PC in actually this instruction address + 8 (due to pipelining)
+    const offset = arm7.sign_extend(@TypeOf(inst.offset), inst.offset) << 2; // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining)
 
     // Branch with link
     // Saves PC to R14 (LR)
@@ -88,11 +88,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.lr().* = (cpu.pc().* - 4) & 0xFFFFFFFC;
     }
 
-    if (offset & 0x80000000 != 0) {
-        cpu.pc().* += (offset ^ 0xFFFFFFFF) + 1;
-    } else {
-        cpu.pc().* += offset;
-    }
+    cpu.pc().* +%= offset;
 
     cpu.reset_pipeline();
 }

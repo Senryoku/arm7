@@ -380,9 +380,11 @@ pub fn zero_extend(val: anytype) u32 {
     return @as(u32, val);
 }
 
-pub fn sign_extend_u26(val: u26) u32 {
-    if (val & 0x2000000 != 0) {
-        return @as(u32, val) | 0xFC000000;
+pub fn sign_extend(comptime T: type, val: T) u32 {
+    const sign_bit_mask = comptime @as(T, 1 << (@bitSizeOf(T) - 1));
+    if (val & sign_bit_mask != 0) {
+        const high_bits: u32 = comptime @as(u32, 0xFFFFFFFF) << @intCast(@bitSizeOf(T));
+        return @as(u32, val) | high_bits;
     } else {
         return val;
     }
