@@ -393,7 +393,7 @@ pub const ARM7 = struct {
     spsr_abt: CPSR = .{},
     spsr_und: CPSR = .{},
 
-    instruction_pipeline: [2]u32 = undefined,
+    instruction_pipeline: [1]u32 = undefined,
 
     pub fn init(memory: []u8) @This() {
         init_jump_table();
@@ -448,8 +448,6 @@ pub const ARM7 = struct {
         return instr;
     }
 
-    fn decode() void {}
-
     fn execute(self: *@This(), instr: u32) void {
         const tag = get_instr_tag(instr);
         interpreter.InstructionHandlers[JumpTable[tag]](self, instr);
@@ -457,19 +455,12 @@ pub const ARM7 = struct {
 
     pub fn reset_pipeline(self: *@This()) void {
         self.instruction_pipeline[0] = self.fetch();
-        self.instruction_pipeline[1] = self.fetch();
-    }
-
-    // To be used internally by instructions that modify the PC.
-    // We don't need fetch an additional time, 'tick()' will do it.
-    pub fn flush_pipeline(self: *@This()) void {
-        self.instruction_pipeline[1] = self.fetch();
     }
 
     pub fn tick(self: *@This()) void {
-        self.execute(self.instruction_pipeline[0]);
-        self.instruction_pipeline[0] = self.instruction_pipeline[1];
-        self.instruction_pipeline[1] = self.fetch();
+        const instr = self.instruction_pipeline[0];
+        self.instruction_pipeline[0] = self.fetch();
+        self.execute(instr);
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {

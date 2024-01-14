@@ -92,7 +92,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.pc().* += offset;
     }
 
-    cpu.flush_pipeline();
+    cpu.reset_pipeline();
 }
 
 fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
@@ -145,7 +145,7 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             cpu.write(u32, addr, cpu.r(inst.rd).*);
     } else {
         cpu.r(inst.rd).* = if (inst.b == 1) cpu.read(u8, addr) else cpu.read(u32, addr);
-        if (inst.rd == 15) cpu.flush_pipeline();
+        if (inst.rd == 15) cpu.reset_pipeline();
     }
 
     if (inst.w == 1) cpu.r(inst.rn).* = offset_addr;
@@ -434,7 +434,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
     // If PC as been written to, flush pipeline and refill it.
     switch (inst.opcode) {
         .TST, .TEQ, .CMP, .CMN => {},
-        else => if (inst.rd == 15) cpu.flush_pipeline(),
+        else => if (inst.rd == 15) cpu.reset_pipeline(),
     }
 }
 

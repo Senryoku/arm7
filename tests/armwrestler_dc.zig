@@ -17,7 +17,7 @@ test "armwrestler-dc" {
     core.reset_pipeline();
     for (0..128) |_| {
         const instr = core.instruction_pipeline[0];
-        std.debug.print("[{X:0>8}] {X:0>8}: {b:0>32} {s}\n", .{ core.pc().* - 8, @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
+        std.debug.print("[{X:0>8}] {X:0>8}: {b:0>32} {s}\n", .{ core.pc().* - 4, @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
         core.tick();
     }
 }
