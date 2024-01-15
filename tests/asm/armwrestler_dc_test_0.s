@@ -5,6 +5,9 @@
 .equ BAD_Rn,	0x20
 
 _start:
+	ldr sp,=0x200000
+	
+test_0:
 	stmfd sp!,{lr}
 	
 	ldr r0,=szALU1

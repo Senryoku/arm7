@@ -27,6 +27,25 @@ fn disassemble_register(reg: u4) []const u8 {
     };
 }
 
+fn disassemble_reg_list(reg_list: u16) []const u8 {
+    @memset(&disassemble_addr_mode_temp, 0);
+    disassemble_addr_mode_temp[0] = '{';
+    var cursor: usize = 1;
+    for (0..16) |i| {
+        if ((reg_list >> @intCast(i)) & 1 == 1) {
+            if (cursor != 1) {
+                disassemble_addr_mode_temp[cursor] = ',';
+                cursor += 1;
+            }
+            const r = disassemble_register(@truncate(i));
+            @memcpy(disassemble_addr_mode_temp[cursor .. cursor + r.len], r);
+            cursor += r.len;
+        }
+    }
+    disassemble_addr_mode_temp[cursor] = '}';
+    return disassemble_addr_mode_temp[0 .. cursor + 1];
+}
+
 fn disassemble_condition(cond: arm7.Condition) []const u8 {
     return switch (cond) {
         .EQ => "eq",
@@ -95,9 +114,21 @@ fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
 }
 
 fn disassemble_block_data_transfer(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "BlockDataTransfer";
+    const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
+    const cond = disassemble_condition(inst.cond);
+    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}{s}", .{
+        if (inst.l == 0) "stm" else "ldm",
+        cond,
+        switch ((@as(u2, inst.u) << 1) | inst.p) {
+            0b00 => "da",
+            0b01 => "db",
+            0b10 => "ia",
+            0b11 => "ib",
+        },
+        disassemble_register(inst.rn),
+        if (inst.w == 1) "!" else "",
+        disassemble_reg_list(inst.reg_list),
+    }) catch unreachable;
 }
 
 fn disassemble_branch(instruction: u32) []const u8 {

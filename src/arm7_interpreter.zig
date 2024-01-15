@@ -76,11 +76,12 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const base = cpu.r(inst.rn).*;
 
-    var addr = base; // TODO: Multiple possible address modes?
+    var addr = base;
 
-    // TODO: U: Up/Down bit
-    // TODO: P: Pre/Post indexing bit
-    // TODO: W: Write-back bit
+    const stride: u32 = @bitCast(if (inst.u == 1) @as(i32, 4) else -4);
+
+    // Pre indexing
+    if (inst.p == 1) addr +%= stride;
 
     // LDM (1) / STM (1)
     if (inst.s == 0) {
@@ -89,21 +90,21 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             inline for (0..15) |i| {
                 if (inst.reg(i)) {
                     cpu.r(@intCast(i)).* = cpu.read(u32, addr);
-                    addr += 4;
+                    addr +%= stride;
                 }
             }
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
                 cpu.r(15).* = value & 0xFFFFFFFE;
                 cpu.cpsr.t = value & 1 == 1;
-                addr += 4;
+                addr +%= stride;
             }
         } else {
             // Store STM(1)
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
                     cpu.write(u32, addr, cpu.r(@intCast(i)).*);
-                    addr += 4;
+                    addr +%= stride;
                     //if Shared(address) then /* from ARMv6 */
                     //   physical_address = TLB(address)
                     //   ClearExclusiveByAddress(physical_address,processor_id,4)
@@ -118,7 +119,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 for (0..15) |i| {
                     if (inst.reg(i)) {
                         cpu._r[i] = cpu.read(u32, addr);
-                        addr += 4;
+                        addr +%= stride;
                     }
                 }
             } else {
@@ -130,6 +131,10 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             @panic("Unimplemented STM with s=1");
         }
     }
+
+    // Writeback, correctling addr if we were pre-indexing
+    if (inst.w == 1)
+        cpu.r(inst.rn).* = addr -% if (inst.p == 1) stride else 0;
 }
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
