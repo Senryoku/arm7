@@ -16,7 +16,7 @@ test "armwrestler-dc-test-0" {
     cpu.pc().* = 0;
     cpu.reset_pipeline();
 
-    for (0..1024) |_| {
+    for (0..2048) |_| {
         const instr = cpu.instruction_pipeline[0];
         std.debug.print("[{X:0>8}] {X:0>8}: {b:0>32} {s}\n", .{ cpu.pc().* - 4, @as(u32, @bitCast(instr)), @as(u32, @bitCast(instr)), arm7.ARM7.disassemble(instr) });
         cpu.tick();

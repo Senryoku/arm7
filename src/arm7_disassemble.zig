@@ -176,9 +176,15 @@ fn disassemble_single_data_swap(instruction: u32) []const u8 {
 }
 
 fn disassemble_multiply(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "Multiply";
+    const instr: arm7.MultiplyInstruction = @bitCast(instruction);
+    const cond = disassemble_condition(instr.cond);
+    return std.fmt.bufPrint(&disassemble_temp, "mul{s}{s} {s}, {s}, {s}", .{
+        cond,
+        if (instr.s == 1) "s" else "",
+        disassemble_register(instr.rd),
+        disassemble_register(instr.rm),
+        disassemble_register(instr.rs),
+    }) catch unreachable;
 }
 
 fn disassemble_multiply_long(instruction: u32) []const u8 {

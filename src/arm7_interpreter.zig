@@ -224,7 +224,12 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    @panic("Unimplemented multiply");
+    cpu.r(inst.rd).* = cpu.r(inst.rm).* *% cpu.r(inst.rs).*;
+
+    if (inst.s == 1) {
+        cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
+        cpu.cpsr.z = cpu.r(inst.rd).* == 0;
+    }
 }
 
 fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
