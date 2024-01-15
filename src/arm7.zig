@@ -211,6 +211,10 @@ pub const BlockDataTransferInstruction = packed struct(u32) {
     p: u1,
     _tag: u3,
     cond: Condition,
+
+    pub inline fn reg(self: @This(), idx: anytype) bool {
+        return self.reg_list & (@as(u16, 1) << @intCast(idx)) != 0;
+    }
 };
 
 pub const BranchInstructionTags: u32 = 0b0000_1010_0000_0000_0000_0000_0000_0000;

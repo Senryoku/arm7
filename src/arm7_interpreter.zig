@@ -78,36 +78,56 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     var addr = base; // TODO: Multiple possible address modes?
 
-    // TODO: S: PSR & force user bit
     // TODO: U: Up/Down bit
     // TODO: P: Pre/Post indexing bit
     // TODO: W: Write-back bit
 
-    if (inst.l == 1) {
-        // Load
-        inline for (0..15) |i| {
-            if (inst.reg_list & (@as(u16, 1) << i) != 0) {
-                cpu.r(@intCast(i)).* = cpu.read(u32, addr);
+    // LDM (1) / STM (1)
+    if (inst.s == 0) {
+        if (inst.l == 1) {
+            // Load LDM(1)
+            inline for (0..15) |i| {
+                if (inst.reg(i)) {
+                    cpu.r(@intCast(i)).* = cpu.read(u32, addr);
+                    addr += 4;
+                }
+            }
+            if (inst.reg(15)) {
+                const value = cpu.read(u32, addr);
+                cpu.r(15).* = value & 0xFFFFFFFE;
+                cpu.cpsr.t = value & 1 == 1;
                 addr += 4;
             }
-        }
-        if (inst.reg_list & @as(u16, 1) << 15 != 0) {
-            const value = cpu.read(u32, addr);
-            cpu.r(15).* = value & 0xFFFFFFFE;
-            cpu.cpsr.t = value & 1 == 1;
-            addr += 4;
+        } else {
+            // Store STM(1)
+            inline for (0..16) |i| {
+                if (inst.reg(i)) {
+                    cpu.write(u32, addr, cpu.r(@intCast(i)).*);
+                    addr += 4;
+                    //if Shared(address) then /* from ARMv6 */
+                    //   physical_address = TLB(address)
+                    //   ClearExclusiveByAddress(physical_address,processor_id,4)
+                    // /* See Summary of operation on page A2-49 *
+                }
+            }
         }
     } else {
-        // Store
-        inline for (0..16) |i| {
-            if (inst.reg_list & (@as(u16, 1) << i) != 0) {
-                cpu.write(u32, addr, cpu.r(@intCast(i)).*);
-                addr += 4;
-                //if Shared(address) then /* from ARMv6 */
-                //   physical_address = TLB(address)
-                //   ClearExclusiveByAddress(physical_address,processor_id,4)
-                // /* See Summary of operation on page A2-49 *
+        if (inst.l == 1) {
+            if (inst.reg(15)) {
+                // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
+                for (0..15) |i| {
+                    if (inst.reg(i)) {
+                        cpu._r[i] = cpu.read(u32, addr);
+                        addr += 4;
+                    }
+                }
+            } else {
+                // LDM (3)
+                @panic("Unimplemented LDM with s=1 and reg_list[15]=1");
             }
+        } else {
+            // STM (1)
+            @panic("Unimplemented STM with s=1");
         }
     }
 }
