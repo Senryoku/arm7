@@ -68,11 +68,48 @@ fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
     @panic("Unimplemented branch and exchange");
 }
 
+// LDM, STM
 fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
-    @panic("Unimplemented block data transfer");
+
+    const base = cpu.r(inst.rn).*;
+
+    var addr = base; // TODO: Multiple possible address modes?
+
+    // TODO: S: PSR & force user bit
+    // TODO: U: Up/Down bit
+    // TODO: P: Pre/Post indexing bit
+    // TODO: W: Write-back bit
+
+    if (inst.l == 1) {
+        // Load
+        inline for (0..15) |i| {
+            if (inst.reg_list & (@as(u16, 1) << i) != 0) {
+                cpu.r(@intCast(i)).* = cpu.read(u32, addr);
+                addr += 4;
+            }
+        }
+        if (inst.reg_list & @as(u16, 1) << 15 != 0) {
+            const value = cpu.read(u32, addr);
+            cpu.r(15).* = value & 0xFFFFFFFE;
+            cpu.cpsr.t = value & 1 == 1;
+            addr += 4;
+        }
+    } else {
+        // Store
+        inline for (0..16) |i| {
+            if (inst.reg_list & (@as(u16, 1) << i) != 0) {
+                cpu.write(u32, addr, cpu.r(@intCast(i)).*);
+                addr += 4;
+                //if Shared(address) then /* from ARMv6 */
+                //   physical_address = TLB(address)
+                //   ClearExclusiveByAddress(physical_address,processor_id,4)
+                // /* See Summary of operation on page A2-49 *
+            }
+        }
+    }
 }
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
@@ -263,12 +300,27 @@ inline fn n_flag(v: u32) bool {
 // the sign of both operands. Subtraction causes an overflow if the operands have different signs, and the first
 // operand and the result have different signs.
 inline fn overflow_from_add(op1: u32, op2: u32) bool {
-    const r: u32 = @bitCast(@as(i32, @bitCast(op1)) + @as(i32, @bitCast(op2)));
+    const r: u32 = @bitCast(@as(i32, @bitCast(op1)) +% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 == op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
 }
+
+inline fn overflow_from_addc(op1: u32, op2: u32, carry: u32) bool {
+    const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
+    const r0 = @addWithOverflow(op[0], op[1]);
+    const r1 = @addWithOverflow(r0[0], op[2]);
+    return r0[1] == 1 or r1[1] == 1;
+}
+
 inline fn overflow_from_sub(op1: u32, op2: u32) bool {
-    const r: u32 = @bitCast(@as(i32, @bitCast(op1)) - @as(i32, @bitCast(op2)));
+    const r: u32 = @bitCast(@as(i32, @bitCast(op1)) -% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 != op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
+}
+
+inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
+    const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
+    const r0 = @subWithOverflow(op[0], op[1]);
+    const r1 = @subWithOverflow(r0[0], op[2]);
+    return r0[1] == 1 or r1[1] == 1;
 }
 
 // Returns 1 if the addition specified as its parameter caused a carry (true result is bigger than 232−1, where
@@ -278,11 +330,19 @@ fn carry_from(op1: u32, op2: u32) bool {
     return @as(u64, op1) + @as(u64, op2) > 0xFFFFFFFF;
 }
 
+fn carry_from_addc(op1: u64, op2: u64, c: u64) bool {
+    return op1 + op2 + c > 0xFFFFFFFF;
+}
+
 // Returns 1 if the subtraction specified as its parameter caused a borrow (the true result is less than 0, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about a subtraction which occurred earlier in the pseudo-code. The subtraction is not repeated.
 fn borrow_from(op1: u32, op2: u32) bool {
     return op2 > op1;
+}
+
+fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
+    return op1 < @as(u64, op2) + c;
 }
 
 fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
@@ -359,39 +419,40 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             }
         },
         .ADC => {
-            op2 += if (cpu.cpsr.c) 1 else 0; // FIXME: What if it overflows here?
+            const carry: u32 = if (cpu.cpsr.c) 1 else 0;
+            op2 +%= carry;
             cpu.r(inst.rd).* = op1 +% op2;
             if (inst.s == 1 and inst.rd == 15) {
                 cpu.cpsr = cpu.spsr().*;
             } else if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
                 cpu.cpsr.z = cpu.r(inst.rd).* == 0;
-                cpu.cpsr.c = carry_from(op1, op2);
-                cpu.cpsr.v = overflow_from_add(op1, op2);
+                cpu.cpsr.c = carry_from_addc(op1, op2, carry);
+                cpu.cpsr.v = overflow_from_addc(op1, op2, carry);
             }
         },
         .SBC => {
-            op2 += if (cpu.cpsr.c) 1 else 0; // FIXME: What if it overflows here?
-            cpu.r(inst.rd).* = op1 -% op2;
+            const carry: u32 = if (cpu.cpsr.c) 1 else 0;
+            cpu.r(inst.rd).* = op1 -% op2 -% carry;
             if (inst.s == 1 and inst.rd == 15) {
                 cpu.cpsr = cpu.spsr().*;
             } else if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
                 cpu.cpsr.z = cpu.r(inst.rd).* == 0;
-                cpu.cpsr.c = !borrow_from(op1, op2);
-                cpu.cpsr.v = overflow_from_sub(op1, op2);
+                cpu.cpsr.c = !borrow_from_subc(op1, op2, carry);
+                cpu.cpsr.v = overflow_from_subc(op1, op2, carry);
             }
         },
         .RSC => {
-            const op1_c = op1 + if (cpu.cpsr.c) @as(u32, 1) else 0; // FIXME: What if it overflows here?
-            cpu.r(inst.rd).* = op2 -% op1_c;
+            const carry: u32 = if (cpu.cpsr.c) 1 else 0;
+            cpu.r(inst.rd).* = op2 -% op1 -% carry;
             if (inst.s == 1 and inst.rd == 15) {
                 cpu.cpsr = cpu.spsr().*;
             } else if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
                 cpu.cpsr.z = cpu.r(inst.rd).* == 0;
-                cpu.cpsr.c = !borrow_from(op2, op1_c);
-                cpu.cpsr.v = overflow_from_sub(op2, op1_c);
+                cpu.cpsr.c = !borrow_from_subc(op2, op1, carry);
+                cpu.cpsr.v = overflow_from_subc(op2, op1, carry);
             }
         },
         .TST => {
