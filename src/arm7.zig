@@ -415,6 +415,21 @@ fn init_jump_table() void {
     }
 }
 
+const Exception = enum {
+    Reset,
+    DataAbort,
+    FIQ,
+    IRQ,
+    PrefetchAbort,
+    SoftwareInterrupt,
+    Undefined,
+};
+
+const Signal = enum {
+    Low,
+    High,
+};
+
 // Generic ARM7 Core
 // T: 16bit Thumb
 // D: JTAG Debug
@@ -442,6 +457,8 @@ pub const ARM7 = struct {
 
     instruction_pipeline: [1]u32 = undefined,
 
+    reset_line: Signal = .Low,
+
     on_external_read: struct {
         callback: *const fn (data: *const anyopaque, address: u32) u32 = undefined,
         data: ?*const anyopaque = null,
@@ -454,6 +471,35 @@ pub const ARM7 = struct {
     pub fn init(memory: []u8) @This() {
         init_jump_table();
         return .{ .memory = memory };
+    }
+
+    pub fn set_reset(self: *@This(), signal: Signal) void {
+        // When the nRESET signal goes LOW a reset occurs, and the ARM7TDMI core
+        // abandons the executing instruction and continues to increment the address bus as if still
+        // fetching word or halfword instructions. nMREQ and SEQ indicates internal cycles
+        // during this time.
+
+        // When nRESET goes HIGH again, the ARM7TDMI processor:
+        // 1. Overwrites R14_svc and SPSR_svc by copying the current values of the PC and
+        // CPSR into them. The values of the PC and CPSR are indeterminate.
+        // 2. Forces M[4:0] to b10011, Supervisor mode, sets the I and F bits, and clears the
+        // T-bit in the CPSR.
+        // 3. Forces the PC to fetch the next instruction from address 0x00.
+        // 4. Reverts to ARM state if necessary and resumes execution.
+        // After reset, all register values except the PC and CPSR are indeterminate.
+        if (signal == .High and self.reset_line == .Low) {
+            self.r_svc[1] = self.pc().*;
+            self.spsr_svc = self.cpsr;
+
+            self.cpsr.m = .Supervisor;
+            self.cpsr.i = true;
+            self.cpsr.f = true;
+            self.cpsr.t = false;
+
+            self.pc().* = 0x00;
+            self.reset_pipeline();
+        }
+        self.reset_line = signal;
     }
 
     pub inline fn r(self: *@This(), index: u5) *u32 {
