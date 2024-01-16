@@ -61,6 +61,11 @@ pub const ScaledRegisterOffset = packed struct(u12) {
     shift_imm: u5,
 };
 
+// When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
+// NOTE: It is actually implementation defined, and maybe should be exposed as a compile time option?
+//       Also, it applies to STM too and PC is already +8 due to pipelining.
+const STR_STM_store_R15_plus_4 = true;
+
 fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
@@ -80,6 +85,13 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const stride: u32 = @bitCast(if (inst.u == 1) @as(i32, 4) else -4);
 
+    // The lowest-numbered register is stored at the lowest memory address and
+    // the highest-numbered register at the highest memory address.
+
+    // For simplicity we'll always loop through registers in ascending order,
+    // adjust the address to the base of the range when decrementing.
+    if (inst.u == 0) addr +%= stride *% (@popCount(inst.reg_list) - 1);
+
     // Pre indexing
     if (inst.p == 1) addr +%= stride;
 
@@ -90,21 +102,23 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             inline for (0..15) |i| {
                 if (inst.reg(i)) {
                     cpu.r(@intCast(i)).* = cpu.read(u32, addr);
-                    addr +%= stride;
+                    addr += 4;
                 }
             }
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
-                cpu.r(15).* = value & 0xFFFFFFFE;
+                cpu.r(15).* = value & 0xFFFFFFFC;
                 cpu.cpsr.t = value & 1 == 1;
-                addr +%= stride;
+                addr += 4;
             }
         } else {
             // Store STM(1)
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
+                    var val = cpu.r(@intCast(i)).*;
+                    if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
                     cpu.write(u32, addr, cpu.r(@intCast(i)).*);
-                    addr +%= stride;
+                    addr += 4;
                     //if Shared(address) then /* from ARMv6 */
                     //   physical_address = TLB(address)
                     //   ClearExclusiveByAddress(physical_address,processor_id,4)
@@ -119,7 +133,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 for (0..15) |i| {
                     if (inst.reg(i)) {
                         cpu._r[i] = cpu.read(u32, addr);
-                        addr +%= stride;
+                        addr += 4;
                     }
                 }
             } else {
@@ -132,9 +146,9 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         }
     }
 
-    // Writeback, correctling addr if we were pre-indexing
+    // Writeback
     if (inst.w == 1)
-        cpu.r(inst.rn).* = addr -% if (inst.p == 1) stride else 0;
+        cpu.r(inst.rn).* +%= stride *% @popCount(inst.reg_list);
 }
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
@@ -195,14 +209,15 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const addr = if (inst.p == 1) offset_addr else base;
 
-    // When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
-    // FIXME: I think it's +8 with the current implementation? Maybe?
-
     if (inst.l == 0) {
+        var val = cpu.r(inst.rd).*;
+
+        if (STR_STM_store_R15_plus_4 and inst.rd == 15) val += 4;
+
         if (inst.b == 1)
-            cpu.write(u8, addr, @truncate(cpu.r(inst.rd).*))
+            cpu.write(u8, addr, @truncate(val))
         else
-            cpu.write(u32, addr, cpu.r(inst.rd).*);
+            cpu.write(u32, addr, val);
     } else {
         cpu.r(inst.rd).* = if (inst.b == 1) cpu.read(u8, addr) else cpu.read(u32, addr);
         if (inst.rd == 15) cpu.reset_pipeline();

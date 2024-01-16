@@ -257,7 +257,7 @@ fn disassemble_data_processing(instruction: u32) []const u8 {
         .MOV, .MVN => std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s},{s}", .{
             disassemble_opcode(instr.opcode),
             disassemble_condition(instr.cond),
-            if (instr.s == 1) "S" else "",
+            if (instr.s == 1) "s" else "",
             disassemble_register(instr.rd),
             op2,
         }),
@@ -270,7 +270,7 @@ fn disassemble_data_processing(instruction: u32) []const u8 {
         else => std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s},{s},{s}", .{
             disassemble_opcode(instr.opcode),
             disassemble_condition(instr.cond),
-            if (instr.s == 1) "S" else "",
+            if (instr.s == 1) "s" else "",
             disassemble_register(instr.rd),
             disassemble_register(instr.rn),
             op2,

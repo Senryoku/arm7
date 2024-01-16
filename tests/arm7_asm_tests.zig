@@ -53,3 +53,46 @@ test "ARM7 Tests" {
     cpu.tick();
     try expect_mem(mem, 0x20000, 0xC1C1C1C1);
 }
+
+const ldm_stm = @embedFile("bin/ldm_stm.bin");
+
+test "ldm/stm" {
+    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    defer std.testing.allocator.free(mem);
+
+    @memset(mem, 0);
+    @memcpy(mem[0..ldm_stm.len], ldm_stm);
+
+    var cpu = arm7.ARM7.init(mem);
+
+    cpu.pc().* = 0;
+    cpu.reset_pipeline();
+
+    for (0..15) |_| {
+        cpu.tick();
+    }
+    try std.testing.expect(cpu.r(0).* == 0x2000);
+    for (1..15) |i| {
+        try std.testing.expect(cpu.r(@intCast(i)).* == i);
+    }
+
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2000 - 14 * 4);
+    for (1..15) |i| {
+        try expect_mem(mem, @intCast(0x2000 - 14 * 4 + 4 * (i - 1)), @intCast(i));
+    }
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x4000);
+    cpu.tick();
+    for (1..15) |i| {
+        try std.testing.expect(cpu.r(@intCast(i)).* == 0);
+    }
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2000);
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2000 - 14 * 4);
+    cpu.tick();
+    for (1..15) |i| {
+        try std.testing.expect(cpu.r(@intCast(i)).* == i);
+    }
+}

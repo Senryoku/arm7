@@ -4,6 +4,8 @@
 .equ BAD_Rd,	0x10
 .equ BAD_Rn,	0x20
 
+	.global _start 
+
 _start:
 	ldr sp,=0x200000
 	
