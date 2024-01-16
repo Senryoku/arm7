@@ -442,6 +442,15 @@ pub const ARM7 = struct {
 
     instruction_pipeline: [1]u32 = undefined,
 
+    on_external_read: struct {
+        callback: *const fn (data: *const anyopaque, address: u32) u32 = undefined,
+        data: ?*const anyopaque = null,
+    } = .{},
+    on_external_write: struct {
+        callback: *const fn (data: *anyopaque, address: u32, value: u32) void = undefined,
+        data: ?*anyopaque = null,
+    } = .{},
+
     pub fn init(memory: []u8) @This() {
         init_jump_table();
         return .{ .memory = memory };
@@ -511,10 +520,14 @@ pub const ARM7 = struct {
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
+        if (T == u32)
+            if (address >= self.memory.len) return self.on_external_read.callback(self.on_external_read.data.?, address);
         return @as(*const T, @alignCast(@ptrCast(&self.memory[address]))).*;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
+        if (T == u32)
+            if (address >= self.memory.len) return self.on_external_write.callback(self.on_external_write.data.?, address, value);
         @as(*T, @alignCast(@ptrCast(&self.memory[address]))).* = value;
     }
 
