@@ -377,7 +377,7 @@ inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
     return r0[1] == 1 or r1[1] == 1;
 }
 
-// Returns 1 if the addition specified as its parameter caused a carry (true result is bigger than 232−1, where
+// Returns 1 if the addition specified as its parameter caused a carry (true result is bigger than 2^32−1, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about an addition which occurred earlier in the pseudo-code. The addition is not repeated.
 fn carry_from(op1: u32, op2: u32) bool {
@@ -632,7 +632,7 @@ pub inline fn operand_2_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifter_
                 };
             } else return .{
                 .shifter_operand = rm >> shift_amount,
-                .shifter_carry_out = if (shift_amount == 0) cpu.cpsr.c else (rm >> (shift_amount - 1)) & 0x80000000 != 0,
+                .shifter_carry_out = (rm >> (shift_amount - 1)) & 1 != 0,
             };
         },
         .ASR => {
