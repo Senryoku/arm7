@@ -47,7 +47,7 @@ inline fn handle_condition(cpu: *arm7.ARM7, cond: arm7.Condition) bool {
     return true;
 }
 
-pub const LogicalShift = enum(u2) {
+pub const ShiftType = enum(u2) {
     LSL = 0b00,
     LSR = 0b01,
     ASR = 0b10,
@@ -56,9 +56,15 @@ pub const LogicalShift = enum(u2) {
 
 pub const ScaledRegisterOffset = packed struct(u12) {
     rm: u4,
-    _: u1 = 0,
-    shift: LogicalShift,
-    shift_imm: u5,
+    register_specified: u1,
+    shift_type: ShiftType,
+    shift_amount: packed union {
+        imm: u5,
+        reg: packed struct {
+            _: u1 = 0,
+            rs: u4,
+        },
+    },
 };
 
 // When R15 is the source register (Rd) of a register store (STR) instruction, the stored value will be address of the instruction plus 12.
@@ -195,11 +201,14 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     if (inst.i == 1) {
         const sro: ScaledRegisterOffset = @bitCast(inst.offset);
         std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
-        offset = switch (sro.shift) {
-            .LSL => cpu.r(sro.rm).* << sro.shift_imm,
-            .LSR => if (sro.shift_imm == 0) 0 else cpu.r(sro.rm).* >> sro.shift_imm,
-            .ASR => if (sro.shift_imm == 0) (if (cpu.r(sro.rm).* & 0x80000000 != 0) 0xFFFFFFFF else 0) else arithmetic_shift_right(cpu, sro),
-            .ROR => if (sro.shift_imm == 0) ((@as(u32, (if (cpu.cpsr.c) 1 else 0)) << 31) | (cpu.r(sro.rm).* >> 1)) else std.math.rotr(u32, cpu.r(sro.rm).*, sro.shift_imm),
+        std.debug.assert(sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
+        const rm = cpu.r(sro.rm).*;
+        const shift_amount = sro.shift_amount.imm;
+        offset = switch (sro.shift_type) {
+            .LSL => rm << shift_amount,
+            .LSR => if (shift_amount == 0) 0 else rm >> shift_amount,
+            .ASR => if (shift_amount == 0) (if (rm & 0x80000000 != 0) 0xFFFFFFFF else 0) else arithmetic_shift_right(rm, shift_amount),
+            .ROR => if (shift_amount == 0) ((if (cpu.cpsr.c) @as(u32, 0x80000000) else 0) | rm >> 1) else std.math.rotr(u32, rm, shift_amount),
         };
     }
 
@@ -590,17 +599,76 @@ fn handle_invalid(cpu: *arm7.ARM7, instruction: u32) void {
 const barrel_shifter_result = struct { shifter_operand: u32, shifter_carry_out: bool };
 
 pub inline fn operand_2_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifter_result {
-    const shift_imm = (operand2 >> 7) & 0b11111;
-    if (shift_imm == 0) {
-        return .{
-            .shifter_operand = cpu.r(@truncate(operand2 & 0xF)).*,
-            .shifter_carry_out = cpu.cpsr.c,
-        };
-    } else {
-        return .{
-            .shifter_operand = cpu.r(@truncate(operand2 & 0xF)).* << @intCast(shift_imm),
-            .shifter_carry_out = (cpu.r(@truncate(operand2 & 0xF)).* << @intCast(shift_imm - 1)) >> 31 == 1,
-        };
+    const sro: ScaledRegisterOffset = @bitCast(operand2);
+
+    const rm = cpu.r(sro.rm).*;
+
+    const shift_type: ShiftType = sro.shift_type;
+
+    const shift_amount: u5 = @truncate(if (sro.register_specified == 0)
+        // Fixed shift
+        sro.shift_amount.imm
+    else
+        // Shift amount from register (Rs) - Bottom byte only
+        cpu.r(sro.shift_amount.reg.rs).* & 0xFF);
+
+    switch (shift_type) {
+        .LSL => {
+            return .{
+                .shifter_operand = rm << shift_amount,
+                .shifter_carry_out = if (shift_amount == 0) cpu.cpsr.c else (rm << (shift_amount - 1)) & 0x80000000 != 0,
+            };
+        },
+        .LSR => {
+            if (shift_amount == 0) {
+                // The form of the shift field which might be expected to correspond to LSR #0 is used to
+                // encode LSR #32, which has a zero result with bit 31 of Rm as the carry output. Logical
+                // shift right zero is redundant as it is the same as logical shift left zero, so the assembler
+                // will convert LSR #0 (and ASR #0 and ROR #0) into LSL #0, and allow LSR #32 to be
+                // specified.
+                return .{
+                    .shifter_operand = 0,
+                    .shifter_carry_out = rm & 0x80000000 != 0,
+                };
+            } else return .{
+                .shifter_operand = rm >> shift_amount,
+                .shifter_carry_out = if (shift_amount == 0) cpu.cpsr.c else (rm >> (shift_amount - 1)) & 0x80000000 != 0,
+            };
+        },
+        .ASR => {
+            if (shift_amount == 0) {
+                // The form of the shift field which might be expected to give ASR #0 is used to encode
+                // ASR #32. Bit 31 of Rm is again used as the carry output, and each bit of operand 2 is
+                // also equal to bit 31 of Rm. The result is therefore all ones or all zeros, according to the
+                // value of bit 31 of Rm.
+                return .{
+                    .shifter_operand = if (rm & 0x80000000 != 0) 0xFFFFFFFF else 0,
+                    .shifter_carry_out = rm & 0x80000000 != 0,
+                };
+            } else {
+                return .{
+                    .shifter_operand = arithmetic_shift_right(rm, shift_amount),
+                    .shifter_carry_out = (rm >> (shift_amount - 1)) & 1 == 1,
+                };
+            }
+        },
+        .ROR => {
+            if (shift_amount == 0) {
+                // The form of the shift field which might be expected to give ROR #0 is used to encode
+                // a special function of the barrel shifter, rotate right extended (RRX). This is a rotate right
+                // by one bit position of the 33 bit quantity formed by appending the CPSR C flag to the
+                // most significant end of the contents of Rm.
+                return .{
+                    .shifter_operand = (if (cpu.cpsr.c) @as(u32, 0x80000000) else 0) | rm >> 1,
+                    .shifter_carry_out = rm & 1 == 1,
+                };
+            } else {
+                return .{
+                    .shifter_operand = std.math.rotr(u32, rm, shift_amount),
+                    .shifter_carry_out = (rm >> (shift_amount - 1)) & 1 == 1,
+                };
+            }
+        },
     }
 }
 
@@ -618,11 +686,22 @@ pub inline fn operand_2_immediate(cpu: *arm7.ARM7, operand2: u12) barrel_shifter
 }
 
 // Arithmetic Shift Right. Register contents are treatedas two's complement signed integers. The sign bit is copied into vacated bits.
-fn arithmetic_shift_right(cpu: *arm7.ARM7, sro: ScaledRegisterOffset) u32 {
-    const val = cpu.r(sro.rm).*;
+fn arithmetic_shift_right(val: u32, shift_amount: u5) u32 {
     if (val & 0x80000000 != 0) {
-        return ~(~val >> sro.shift_imm);
+        return ~(~val >> shift_amount);
     } else {
-        return val >> sro.shift_imm;
+        return val >> shift_amount;
     }
+}
+
+fn shift(shift_type: ShiftType, value: u32, shift_amount: u5, carry: bool) u32 {
+    return switch (shift_type) {
+        .LSL => value << shift_amount,
+        .LSR => if (shift_amount == 0) 0 else value >> shift_amount,
+        .ASR => if (shift_amount == 0) (if (value & 0x80000000 != 0) 0xFFFFFFFF else 0) else arithmetic_shift_right(value, shift_amount),
+        .ROR => if (shift_amount == 0) // Rotate Right Extended (RRX)
+            ((@as(u32, (if (carry) 1 else 0)) << 31) | (value >> 1))
+        else // Rotate Right (ROR)
+            std.math.rotr(u32, value, shift_amount),
+    };
 }

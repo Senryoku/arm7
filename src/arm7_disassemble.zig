@@ -5,6 +5,7 @@ const arm7_interpreter = @import("arm7_interpreter.zig");
 
 var disassemble_temp: [256]u8 = undefined;
 var disassemble_addr_mode_temp: [256]u8 = undefined;
+var disassemble_sro_temp: [256]u8 = undefined;
 
 fn disassemble_register(reg: u4) []const u8 {
     return switch (reg) {
@@ -88,6 +89,20 @@ fn disassemble_opcode(opcode: arm7.Opcode) []const u8 {
     };
 }
 
+fn dissasemble_sro(sro: arm7_interpreter.ScaledRegisterOffset) []const u8 {
+    return (if (sro.register_specified == 1)
+        std.fmt.bufPrint(&disassemble_sro_temp, "{s},{s} {s}", .{ disassemble_register(sro.rm), @tagName(sro.shift_type), disassemble_register(sro.shift_amount.reg.rs) })
+    else if (sro.shift_amount.imm == 0)
+        switch (sro.shift_type) {
+            .LSL => std.fmt.bufPrint(&disassemble_sro_temp, "{s}", .{disassemble_register(sro.rm)}),
+            .LSR => std.fmt.bufPrint(&disassemble_sro_temp, "{s},{s}#32", .{ disassemble_register(sro.rm), @tagName(sro.shift_type) }),
+            .ASR => std.fmt.bufPrint(&disassemble_sro_temp, "{s},{s}#32", .{ disassemble_register(sro.rm), @tagName(sro.shift_type) }),
+            .ROR => std.fmt.bufPrint(&disassemble_sro_temp, "{s},RRX", .{disassemble_register(sro.rm)}),
+        }
+    else
+        std.fmt.bufPrint(&disassemble_sro_temp, "{s},{s}#{d}", .{ disassemble_register(sro.rm), @tagName(sro.shift_type), sro.shift_amount.imm })) catch unreachable;
+}
+
 fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 {
     const sign = if (inst.u == 1) "" else "-";
     if (inst.i == 0) {
@@ -97,14 +112,9 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
             return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}{X:0>3}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
         }
     } else {
-        const sro: arm7_interpreter.ScaledRegisterOffset = @bitCast(inst.offset);
-        if (sro.shift == .LSL and sro.shift_imm == 0) {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}]", .{ disassemble_register(inst.rn), sign, disassemble_register(sro.rm) }) catch unreachable;
-        } else {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}, {s} #{d}]", .{ disassemble_register(inst.rn), sign, disassemble_register(sro.rm), @tagName(sro.shift), sro.shift_imm }) catch unreachable;
-        }
+        const sro = dissasemble_sro(@bitCast(inst.offset));
+        return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}]", .{ disassemble_register(inst.rn), sign, sro }) catch unreachable;
     }
-    return "[TODO]";
 }
 
 fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
@@ -247,11 +257,10 @@ fn disassemble_msr(instruction: u32) []const u8 {
 fn disassemble_data_processing(instruction: u32) []const u8 {
     const instr: arm7.DataProcessingInstruction = @bitCast(instruction);
 
-    var op2_buf: [32]u8 = undefined;
-    const op2 = (if (instr.i == 0)
-        std.fmt.bufPrint(&op2_buf, "{s},{d}", .{ disassemble_register(@truncate(instr.operand2 & 0xF)), instr.operand2 >> 7 })
+    const op2 = if (instr.i == 1)
+        std.fmt.bufPrint(&disassemble_sro_temp, "#{X:0>3}", .{arm7_interpreter.immediate_shifter_operand(@bitCast(instr.operand2))}) catch unreachable
     else
-        std.fmt.bufPrint(&op2_buf, "#{X:0>3}", .{arm7_interpreter.immediate_shifter_operand(instr.operand2)})) catch unreachable;
+        dissasemble_sro(@bitCast(instr.operand2));
 
     return switch (instr.opcode) {
         .MOV, .MVN => std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s},{s}", .{
