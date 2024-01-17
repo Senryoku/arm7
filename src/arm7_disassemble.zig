@@ -109,7 +109,7 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
         if (inst.offset == 0) {
             return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}]", .{disassemble_register(inst.rn)}) catch unreachable;
         } else {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}{X:0>3}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}0x{X}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
         }
     } else {
         const sro = dissasemble_sro(@bitCast(inst.offset));
