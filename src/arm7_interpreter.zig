@@ -192,13 +192,14 @@ fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataTransferInstruction = @bitCast(instruction);
+    std.debug.assert(inst._tag == 0b01);
     if (!handle_condition(cpu, inst.cond))
         return;
 
     std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
 
     var offset: u32 = inst.offset;
-    if (inst.i == 1) {
+    if (inst.i == 1) { // Offset is a register
         const sro: ScaledRegisterOffset = @bitCast(inst.offset);
         std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
         std.debug.assert(sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
@@ -214,11 +215,13 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const base = cpu.r(inst.rn).*;
 
-    const offset_addr = if (inst.u == 1) base + offset else base - offset;
+    // NOTE: I'm not certain that the wrapping behavior here is needed, or if something else is wrong.
+    const offset_addr = if (inst.u == 1) base +% offset else base -% offset;
 
     const addr = if (inst.p == 1) offset_addr else base;
 
     if (inst.l == 0) {
+        // Store to memory
         var val = cpu.r(inst.rd).*;
 
         if (STR_STM_store_R15_plus_4 and inst.rd == 15) val += 4;
@@ -228,11 +231,29 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         else
             cpu.write(u32, addr, val);
     } else {
-        cpu.r(inst.rd).* = if (inst.b == 1) cpu.read(u8, addr) else cpu.read(u32, addr);
+        // Load from memory
+        if (inst.b == 1) {
+            cpu.r(inst.rd).* = cpu.read(u8, addr);
+        } else {
+            // A word load (LDR) will normally use a word aligned address. However, an address
+            // offset from a word boundary will cause the data to be rotated into the register so that
+            // the addressed byte occupies bits 0 to 7. This means that half-words accessed at offsets
+            // 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15 of the
+            // register. Two shift operations are then required to clear or to sign extend the upper 16
+            // bits.
+
+            // Load word aligned address
+            var val = cpu.read(u32, addr & 0xFFFFFFC);
+            // Rotate it so the addressed byte occupies bits 0 to 7
+            val = std.math.rotr(u32, val, (addr & 3) * 8);
+
+            cpu.r(inst.rd).* = val;
+        }
         if (inst.rd == 15) cpu.reset_pipeline();
     }
 
-    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero.
+    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero,
+    // since the old base value can be retained by setting the offset to zero.
     std.debug.assert(inst.p != 0 or inst.w == 0);
     // Post-indexed data transfers always write back the modified base.
     if (inst.w == 1 or inst.p == 0) cpu.r(inst.rn).* = offset_addr;
