@@ -232,7 +232,16 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         if (inst.rd == 15) cpu.reset_pipeline();
     }
 
-    if (inst.w == 1) cpu.r(inst.rn).* = offset_addr;
+    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero.
+    std.debug.assert(inst.p != 0 or inst.w == 0);
+    // Post-indexed data transfers always write back the modified base.
+    if (inst.w == 1 or inst.p == 0) cpu.r(inst.rn).* = offset_addr;
+
+    // TODO?
+    // The only use of the W bit in a post-indexed data transfer is in privileged mode
+    // code, where setting the W bit forces non-privileged mode for the transfer, allowing the
+    // operating system to generate a user address in a system where the memory
+    // management hardware makes suitable use of this hardware.
 }
 
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
