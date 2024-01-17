@@ -198,7 +198,7 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         offset = switch (sro.shift) {
             .LSL => cpu.r(sro.rm).* << sro.shift_imm,
             .LSR => if (sro.shift_imm == 0) 0 else cpu.r(sro.rm).* >> sro.shift_imm,
-            .ASR => if (sro.shift_imm == 0) (if (cpu.r(sro.rm).* & 0x80000000 != 0) 0xFFFFFFFF else 0) else cpu.r(sro.rm).* >> sro.shift_imm, // FIXME: This is an "arithmetic shift right", don't know what that means yet. Does it update flags?
+            .ASR => if (sro.shift_imm == 0) (if (cpu.r(sro.rm).* & 0x80000000 != 0) 0xFFFFFFFF else 0) else arithmetic_shift_right(cpu, sro),
             .ROR => if (sro.shift_imm == 0) ((@as(u32, (if (cpu.cpsr.c) 1 else 0)) << 31) | (cpu.r(sro.rm).* >> 1)) else std.math.rotr(u32, cpu.r(sro.rm).*, sro.shift_imm),
         };
     }
@@ -615,4 +615,14 @@ pub inline fn operand_2_immediate(cpu: *arm7.ARM7, operand2: u12) barrel_shifter
         .shifter_operand = shifter_operand,
         .shifter_carry_out = if (operand2 >> 8 == 0) cpu.cpsr.c else (shifter_operand >> 31) == 1,
     };
+}
+
+// Arithmetic Shift Right. Register contents are treatedas two's complement signed integers. The sign bit is copied into vacated bits.
+fn arithmetic_shift_right(cpu: *arm7.ARM7, sro: ScaledRegisterOffset) u32 {
+    const val = cpu.r(sro.rm).*;
+    if (val & 0x80000000 != 0) {
+        return ~(~val >> sro.shift_imm);
+    } else {
+        return val >> sro.shift_imm;
+    }
 }
