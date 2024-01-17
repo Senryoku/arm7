@@ -96,3 +96,111 @@ test "ldm/stm" {
         try std.testing.expect(cpu.r(@intCast(i)).* == i);
     }
 }
+test "and" {
+    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    defer std.testing.allocator.free(mem);
+
+    const and_test = @embedFile("bin/and.bin");
+
+    @memset(mem, 0);
+    @memcpy(mem[0..and_test.len], and_test);
+
+    var cpu = arm7.ARM7.init(mem);
+
+    cpu.pc().* = 0;
+    cpu.reset_pipeline();
+
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0xFFFFFFFF);
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x1);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x4);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x8);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x10);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x20);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x40);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x80);
+
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0xFFFFFFFF);
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x1);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x4);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x8);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x10);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x20);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x40);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x80);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x80000000);
+    try std.testing.expect(cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x1);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x2);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(!cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x0);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(cpu.cpsr.z);
+    cpu.tick();
+    cpu.tick();
+    try std.testing.expect(cpu.r(0).* == 0x0);
+    try std.testing.expect(!cpu.cpsr.n);
+    try std.testing.expect(cpu.cpsr.z);
+}
