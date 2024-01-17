@@ -228,8 +228,11 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
         if (inst.b == 1)
             cpu.write(u8, addr, @truncate(val))
-        else
-            cpu.write(u32, addr, val);
+        else {
+            // A word store (STR) should generate a word aligned address. The word presented to
+            // the data bus is not affected if the address is not word aligned.
+            cpu.write(u32, addr & 0xFFFFFFFC, val);
+        }
     } else {
         // Load from memory
         if (inst.b == 1) {
