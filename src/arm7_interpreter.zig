@@ -641,6 +641,15 @@ pub inline fn offset_from_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifte
     // NOTE: This is just here to help the compiler optimize (unless it comes from a register, the shift_amount is always < 32).
     std.debug.assert(sro.register_specified != 0 or shift_amount < 32);
 
+    // If this byte [shift loaded from register] is zero, the unchanged contents of Rm will be used as the second operand,
+    // and the old value of the CPSR C flag will be passed on as the shifter carry output.
+    if (sro.register_specified == 1 and shift_amount == 0) {
+        return .{
+            .shifter_operand = rm,
+            .shifter_carry_out = cpu.cpsr.c,
+        };
+    }
+
     // The PC value will be the address of the instruction, plus 8 or 12 bytes due to instruction
     // prefetching. If the shift amount is specified in the instruction, the PC will be 8 bytes
     // ahead. If a register is used to specify the shift amount the PC will be 12 bytes ahead.
