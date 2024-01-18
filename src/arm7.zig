@@ -454,11 +454,19 @@ pub const ARM7 = struct {
 
     running: bool = false,
 
-    on_external_read: struct {
+    on_external_read8: struct {
+        callback: *const fn (data: *const anyopaque, address: u32) u8 = undefined,
+        data: ?*const anyopaque = null,
+    } = .{},
+    on_external_read32: struct {
         callback: *const fn (data: *const anyopaque, address: u32) u32 = undefined,
         data: ?*const anyopaque = null,
     } = .{},
-    on_external_write: struct {
+    on_external_write8: struct {
+        callback: *const fn (data: *anyopaque, address: u32, value: u8) void = undefined,
+        data: ?*anyopaque = null,
+    } = .{},
+    on_external_write32: struct {
         callback: *const fn (data: *anyopaque, address: u32, value: u32) void = undefined,
         data: ?*anyopaque = null,
     } = .{},
@@ -495,6 +503,15 @@ pub const ARM7 = struct {
             self.reset_pipeline();
         }
         self.running = enable;
+    }
+
+    pub fn fiq_interrupt(self: *@This()) void {
+        // FIXME: This is not the right way to handle interrupts, but right now it looks like
+        //        it might be the only one that I care about.
+        self.cpsr.m = .FastInterrupt;
+        self.lr().* = self.pc().*;
+        self.pc().* = 0x1C;
+        self.reset_pipeline();
     }
 
     pub inline fn r(self: *@This(), index: u5) *u32 {
@@ -561,14 +578,18 @@ pub const ARM7 = struct {
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
+        if (T == u8)
+            if (address >= self.memory.len) return self.on_external_read8.callback(self.on_external_read8.data.?, address);
         if (T == u32)
-            if (address >= self.memory.len) return self.on_external_read.callback(self.on_external_read.data.?, address);
+            if (address >= self.memory.len) return self.on_external_read32.callback(self.on_external_read32.data.?, address);
         return @as(*const T, @alignCast(@ptrCast(&self.memory[address]))).*;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
+        if (T == u8)
+            if (address >= self.memory.len) return self.on_external_write8.callback(self.on_external_write8.data.?, address, value);
         if (T == u32)
-            if (address >= self.memory.len) return self.on_external_write.callback(self.on_external_write.data.?, address, value);
+            if (address >= self.memory.len) return self.on_external_write32.callback(self.on_external_write32.data.?, address, value);
         @as(*T, @alignCast(@ptrCast(&self.memory[address]))).* = value;
     }
 

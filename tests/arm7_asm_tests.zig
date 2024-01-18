@@ -96,6 +96,7 @@ test "ldm/stm" {
         try std.testing.expect(cpu.r(@intCast(i)).* == i);
     }
 }
+
 test "and" {
     const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
     defer std.testing.allocator.free(mem);

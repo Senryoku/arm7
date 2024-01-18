@@ -147,15 +147,24 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         if (inst.l == 1) {
             if (!inst.reg(15)) {
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
-                for (0..15) |i| {
+                inline for (0..15) |i| {
                     if (inst.reg(i)) {
                         cpu._r[i] = cpu.read(u32, addr);
                         addr += 4;
                     }
                 }
             } else {
-                // LDM (3)
-                @panic("Unimplemented LDM with s=1 and reg_list[15]=1");
+                // LDM (3) - Loads a subset, or possibly all, of the general-purpose registers and the PC from sequential memory
+                // locations. Also, the SPSR of the current mode is copied to the CPSR. This is useful for returning from an exception.
+                inline for (0..15) |i| {
+                    if (inst.reg(i)) {
+                        cpu.r(@intCast(i)).* = cpu.read(u32, addr);
+                        addr += 4;
+                    }
+                }
+                cpu.cpsr = cpu.spsr().*;
+                cpu.pc().* = cpu.read(u32, addr);
+                cpu.reset_pipeline();
             }
         } else {
             // STM (1)
