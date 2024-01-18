@@ -512,7 +512,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             }
         },
         .SBC => {
-            const carry: u32 = if (cpu.cpsr.c) 1 else 0;
+            const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r(inst.rd).* = op1 -% op2 -% carry;
             if (inst.s == 1 and inst.rd == 15) {
                 cpu.cpsr = cpu.spsr().*;
@@ -524,7 +524,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             }
         },
         .RSC => {
-            const carry: u32 = if (cpu.cpsr.c) 1 else 0;
+            const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r(inst.rd).* = op2 -% op1 -% carry;
             if (inst.s == 1 and inst.rd == 15) {
                 cpu.cpsr = cpu.spsr().*;
