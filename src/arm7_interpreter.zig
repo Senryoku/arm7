@@ -276,6 +276,9 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
 
     cpu.r(inst.rd).* = cpu.r(inst.rm).* *% cpu.r(inst.rs).*;
 
+    if (inst.a == 1)
+        cpu.r(inst.rd).* +%= cpu.r(inst.rn).*;
+
     if (inst.s == 1) {
         cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
         cpu.cpsr.z = cpu.r(inst.rd).* == 0;
