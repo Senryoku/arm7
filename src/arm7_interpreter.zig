@@ -629,6 +629,12 @@ pub inline fn offset_from_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifte
 
     var rm = cpu.r(sro.rm).*;
 
+    // The PC value will be the address of the instruction, plus 8 or 12 bytes due to instruction
+    // prefetching. If the shift amount is specified in the instruction, the PC will be 8 bytes
+    // ahead. If a register is used to specify the shift amount the PC will be 12 bytes ahead.
+    if (sro.rm == 15 and sro.register_specified == 1)
+        rm += 4;
+
     const shift_type: ShiftType = sro.shift_type;
 
     const shift_amount: u8 = if (sro.register_specified == 0)
@@ -648,13 +654,6 @@ pub inline fn offset_from_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifte
             .shifter_operand = rm,
             .shifter_carry_out = cpu.cpsr.c,
         };
-    }
-
-    // The PC value will be the address of the instruction, plus 8 or 12 bytes due to instruction
-    // prefetching. If the shift amount is specified in the instruction, the PC will be 8 bytes
-    // ahead. If a register is used to specify the shift amount the PC will be 12 bytes ahead.
-    if (sro.rm == 15 and sro.register_specified == 1) {
-        rm += 4;
     }
 
     switch (shift_type) {
