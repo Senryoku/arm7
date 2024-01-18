@@ -711,12 +711,12 @@ pub inline fn offset_from_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifte
                 const sa: u5 = @truncate(shift_amount);
                 return .{
                     .shifter_operand = arithmetic_shift_right(rm, sa),
-                    .shifter_carry_out = (rm >> (sa - 1)) & 1 == 1,
+                    .shifter_carry_out = (rm >> (sa - 1)) & 1 != 0,
                 };
             }
         },
         .ROR => {
-            if ((shift_amount % 32) == 0) {
+            if (shift_amount == 0 and sro.register_specified == 0) {
                 // The form of the shift field which might be expected to give ROR #0 is used to encode
                 // a special function of the barrel shifter, rotate right extended (RRX). This is a rotate right
                 // by one bit position of the 33 bit quantity formed by appending the CPSR C flag to the
@@ -724,6 +724,11 @@ pub inline fn offset_from_register(cpu: *arm7.ARM7, operand2: u12) barrel_shifte
                 return .{
                     .shifter_operand = (if (cpu.cpsr.c) @as(u32, 0x80000000) else 0) | rm >> 1,
                     .shifter_carry_out = rm & 1 == 1,
+                };
+            } else if ((shift_amount % 32) == 0) {
+                return .{
+                    .shifter_operand = rm,
+                    .shifter_carry_out = rm & 0x80000000 != 0,
                 };
             } else {
                 // ROR by n where n is greater than 32 will give the same result and carry out as ROR by n-32
