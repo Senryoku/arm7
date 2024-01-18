@@ -134,7 +134,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         }
     } else {
         if (inst.l == 1) {
-            if (inst.reg(15)) {
+            if (!inst.reg(15)) {
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
                 for (0..15) |i| {
                     if (inst.reg(i)) {
