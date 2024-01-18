@@ -425,11 +425,6 @@ const Exception = enum {
     Undefined,
 };
 
-const Signal = enum {
-    Low,
-    High,
-};
-
 // Generic ARM7 Core
 // T: 16bit Thumb
 // D: JTAG Debug
@@ -458,7 +453,6 @@ pub const ARM7 = struct {
     instruction_pipeline: [1]u32 = undefined,
 
     running: bool = false,
-    reset_line: Signal = .Low,
 
     on_external_read: struct {
         callback: *const fn (data: *const anyopaque, address: u32) u32 = undefined,
@@ -474,7 +468,7 @@ pub const ARM7 = struct {
         return .{ .memory = memory };
     }
 
-    pub fn set_reset(self: *@This(), signal: Signal) void {
+    pub fn reset(self: *@This(), enable: bool) void {
         // When the nRESET signal goes LOW a reset occurs, and the ARM7TDMI core
         // abandons the executing instruction and continues to increment the address bus as if still
         // fetching word or halfword instructions. nMREQ and SEQ indicates internal cycles
@@ -488,7 +482,7 @@ pub const ARM7 = struct {
         // 3. Forces the PC to fetch the next instruction from address 0x00.
         // 4. Reverts to ARM state if necessary and resumes execution.
         // After reset, all register values except the PC and CPSR are indeterminate.
-        if (signal == .High and self.reset_line == .Low) {
+        if (!self.running and enable) {
             self.r_svc[1] = self.pc().*;
             self.spsr_svc = self.cpsr;
 
@@ -499,12 +493,8 @@ pub const ARM7 = struct {
 
             self.pc().* = 0x00;
             self.reset_pipeline();
-
-            self.running = true;
-        } else if (signal == .Low) {
-            self.running = false;
         }
-        self.reset_line = signal;
+        self.running = enable;
     }
 
     pub inline fn r(self: *@This(), index: u5) *u32 {

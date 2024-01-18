@@ -213,6 +213,12 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const addr = if (inst.p == 1) offset_addr else base;
 
+    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero,
+    // since the old base value can be retained by setting the offset to zero.
+    std.debug.assert(inst.p != 0 or inst.w == 0);
+    // Post-indexed data transfers always write back the modified base.
+    if (inst.w == 1 or inst.p == 0) cpu.r(inst.rn).* = offset_addr;
+
     if (inst.l == 0) {
         // Store to memory
         var val = cpu.r(inst.rd).*;
@@ -247,12 +253,6 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         }
         if (inst.rd == 15) cpu.reset_pipeline();
     }
-
-    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero,
-    // since the old base value can be retained by setting the offset to zero.
-    std.debug.assert(inst.p != 0 or inst.w == 0);
-    // Post-indexed data transfers always write back the modified base.
-    if (inst.w == 1 or inst.p == 0) cpu.r(inst.rn).* = offset_addr;
 
     // TODO?
     // The only use of the W bit in a post-indexed data transfer is in privileged mode
