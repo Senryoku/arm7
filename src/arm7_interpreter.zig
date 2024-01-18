@@ -101,6 +101,15 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // Pre indexing
     if (inst.p == 1) addr +%= stride;
 
+    // Writeback
+    // NOTE: A load including rn in the register list will always overwrite this.
+    //       However, a store will store the unchanged value if it is the first register
+    //       in the list, and the updated value otherwise.
+    if (inst.w == 1)
+        cpu.r(inst.rn).* +%= stride *% @popCount(inst.reg_list);
+
+    const first_store = true;
+
     // LDM (1) / STM (1)
     if (inst.s == 0) {
         if (inst.l == 1) {
@@ -123,7 +132,9 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 if (inst.reg(i)) {
                     var val = cpu.r(@intCast(i)).*;
                     if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
-                    cpu.write(u32, addr, cpu.r(@intCast(i)).*);
+                    // See Writeback above.
+                    const value = if (first_store and i == inst.rn) base else cpu.r(@intCast(i)).*;
+                    cpu.write(u32, addr, value);
                     addr += 4;
                     //if Shared(address) then /* from ARMv6 */
                     //   physical_address = TLB(address)
@@ -151,10 +162,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             @panic("Unimplemented STM with s=1");
         }
     }
-
-    // Writeback
-    if (inst.w == 1)
-        cpu.r(inst.rn).* +%= stride *% @popCount(inst.reg_list);
 }
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
