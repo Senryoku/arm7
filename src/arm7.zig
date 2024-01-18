@@ -457,6 +457,7 @@ pub const ARM7 = struct {
 
     instruction_pipeline: [1]u32 = undefined,
 
+    running: bool = false,
     reset_line: Signal = .Low,
 
     on_external_read: struct {
@@ -498,6 +499,10 @@ pub const ARM7 = struct {
 
             self.pc().* = 0x00;
             self.reset_pipeline();
+
+            self.running = true;
+        } else if (signal == .Low) {
+            self.running = false;
         }
         self.reset_line = signal;
     }
