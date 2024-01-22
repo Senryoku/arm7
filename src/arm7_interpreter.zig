@@ -282,7 +282,15 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    @panic("Unimplemented single data swap");
+    const addr = cpu.r(inst.rn).*;
+    const reg = cpu.r(inst.rm).*;
+    if (inst.b == 1) {
+        cpu.r(inst.rd).* = cpu.read(u8, addr);
+        cpu.write(u8, addr, @truncate(reg));
+    } else {
+        cpu.r(inst.rd).* = cpu.read(u32, addr);
+        cpu.write(u32, addr, reg);
+    }
 }
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {

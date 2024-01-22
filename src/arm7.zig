@@ -118,7 +118,7 @@ pub const SingleDataSwapInstruction = packed struct(u32) {
     rd: u4,
     rn: u4,
     _tag2: u2,
-    u: u1,
+    b: u1,
     _tag: u5,
     cond: Condition,
 };
