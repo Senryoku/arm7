@@ -188,12 +188,14 @@ fn disassemble_single_data_swap(instruction: u32) []const u8 {
 fn disassemble_multiply(instruction: u32) []const u8 {
     const instr: arm7.MultiplyInstruction = @bitCast(instruction);
     const cond = disassemble_condition(instr.cond);
-    return std.fmt.bufPrint(&disassemble_temp, "mul{s}{s} {s}, {s}, {s}", .{
+    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}, {s}, {s}, {s}", .{
+        if (instr.a == 1) "mla" else "mul",
         cond,
         if (instr.s == 1) "s" else "",
         disassemble_register(instr.rd),
         disassemble_register(instr.rm),
         disassemble_register(instr.rs),
+        if (instr.a == 1) disassemble_register(instr.rn) else "mul",
     }) catch unreachable;
 }
 

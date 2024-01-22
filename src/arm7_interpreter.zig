@@ -298,10 +298,19 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    cpu.r(inst.rd).* = cpu.r(inst.rm).* *% cpu.r(inst.rs).*;
+    std.debug.assert(inst.rd != inst.rm);
+    std.debug.assert(inst.rd != 15);
+    std.debug.assert(inst.rm != 15);
+    std.debug.assert(inst.rs != 15);
 
-    if (inst.a == 1)
-        cpu.r(inst.rd).* +%= cpu.r(inst.rn).*;
+    var result: u32 = cpu.r(inst.rm).* *% cpu.r(inst.rs).*;
+
+    if (inst.a == 1) {
+        std.debug.assert(inst.rn != 15);
+        result +%= cpu.r(inst.rn).*;
+    }
+
+    cpu.r(inst.rd).* = result;
 
     if (inst.s == 1) {
         cpu.cpsr.n = n_flag(cpu.r(inst.rd).*);
