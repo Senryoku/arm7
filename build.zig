@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
-    const arm7_module = b.createModule(.{ .source_file = .{ .path = "src/arm7.zig" } });
+    const arm7_module = b.createModule(.{ .root_source_file = .{ .path = "src/arm7.zig" } });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib_unit_tests);
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    const run_asm_tests = add_test(b, "arm7_asm_tests", "tests/arm7_asm_tests.zig", &lib.step, arm7_module);
+    const run_asm_tests = add_test(b, "arm7_asm_tests", "tests/arm7_asm_tests.zig", &lib.step, arm7_module, target, optimize);
     //const run_armwrestler_dc_tests = add_test(b, "armwrestler_dc", "tests/armwrestler_dc.zig", &lib.step, arm7_module);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
@@ -53,14 +53,14 @@ pub fn build(b: *std.Build) void {
     //test_step.dependOn(&run_armwrestler_dc_tests.step);
 }
 
-fn add_test(b: *std.Build, comptime name: []const u8, comptime entry: []const u8, arm7_lib: *std.Build.Step, arm7_module: *std.Build.Module) *std.Build.Step.Run {
+fn add_test(b: *std.Build, comptime name: []const u8, comptime entry: []const u8, arm7_lib: *std.Build.Step, arm7_module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Run {
     const exe = b.addTest(.{
         .name = name,
         .root_source_file = .{ .path = entry },
-        .target = .{},
-        .optimize = .Debug,
+        .target = target,
+        .optimize = optimize,
     });
-    exe.addModule("arm7", arm7_module);
+    exe.root_module.addImport("arm7", arm7_module);
 
     const install_step = b.step(name, "Install " ++ name ++ " for debugging");
     install_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
