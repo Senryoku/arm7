@@ -108,7 +108,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     if (inst.w == 1)
         cpu.r(inst.rn).* +%= stride *% @popCount(inst.reg_list);
 
-    const first_store = true;
+    var first_store = true;
 
     // LDM (1) / STM (1)
     if (inst.s == 0) {
@@ -132,8 +132,11 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 if (inst.reg(i)) {
                     var val = cpu.r(@intCast(i)).*;
                     if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
+
                     // See Writeback above.
-                    const value = if (first_store and i == inst.rn) base else cpu.r(@intCast(i)).*;
+                    const value = if (first_store and i == inst.rn) base else val;
+                    first_store = false;
+
                     cpu.write(u32, addr, value);
                     addr += 4;
                     //if Shared(address) then /* from ARMv6 */
