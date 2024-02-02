@@ -557,7 +557,7 @@ pub const ARM7 = struct {
     }
 
     pub fn fetch(self: *@This()) u32 {
-        const instr = self.read(u32, self.pc().*);
+        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc().*]))).*;
         self.pc().* += 4;
         return instr;
     }
