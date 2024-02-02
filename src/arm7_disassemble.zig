@@ -126,7 +126,7 @@ fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
 fn disassemble_block_data_transfer(instruction: u32) []const u8 {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
     const cond = disassemble_condition(inst.cond);
-    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}{s}", .{
+    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}, {s}", .{
         if (inst.l == 0) "stm" else "ldm",
         cond,
         switch ((@as(u2, inst.u) << 1) | inst.p) {

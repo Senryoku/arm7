@@ -123,6 +123,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
                 cpu.r(15).* = value & 0xFFFFFFFC;
+                cpu.reset_pipeline();
                 cpu.cpsr.t = value & 1 == 1;
                 addr += 4;
             }
@@ -166,7 +167,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                     }
                 }
                 cpu.cpsr = cpu.spsr().*;
-                cpu.pc().* = cpu.read(u32, addr);
+                cpu.pc().* = cpu.read(u32, addr) & 0xFFFFFFFC;
                 cpu.reset_pipeline();
             }
         } else {
