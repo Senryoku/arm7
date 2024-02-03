@@ -105,15 +105,25 @@ fn dissasemble_sro(sro: arm7_interpreter.ScaledRegisterOffset) []const u8 {
 
 fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 {
     const sign = if (inst.u == 1) "" else "-";
-    if (inst.i == 0) {
-        if (inst.offset == 0) {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}]", .{disassemble_register(inst.rn)}) catch unreachable;
+    if (inst.p == 1) { // Pre-indexed addessing
+        if (inst.i == 0) {
+            if (inst.offset == 0) {
+                return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}]", .{disassemble_register(inst.rn)}) catch unreachable;
+            } else {
+                return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}0x{X}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
+            }
         } else {
-            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, #{s}0x{X}]", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
+            const sro = dissasemble_sro(@bitCast(inst.offset));
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}]", .{ disassemble_register(inst.rn), sign, sro }) catch unreachable;
         }
-    } else {
-        const sro = dissasemble_sro(@bitCast(inst.offset));
-        return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}, {s}{s}]", .{ disassemble_register(inst.rn), sign, sro }) catch unreachable;
+    } else { // Post-indexed addressing
+        if (inst.i == 0) {
+            std.debug.assert(inst.offset != 0);
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}], #{s}0x{X}", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
+        } else {
+            const sro = dissasemble_sro(@bitCast(inst.offset));
+            return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}], {s}{s}", .{ disassemble_register(inst.rn), sign, sro }) catch unreachable;
+        }
     }
 }
 
@@ -172,7 +182,7 @@ fn disassemble_single_data_transfer(instruction: u32) []const u8 {
         if (instr.l == 1) "ltr" else "str",
         cond,
         if (instr.b == 1) "b" else "",
-        if (instr.w == 1 and instr.p == 1) "t" else "", // FIXME: I don't how it works yet.
+        if (false) "t" else "", // FIXME: I don't how it works yet.
         disassemble_register(instr.rd),
         expr,
         if (instr.w == 1) "!" else "",

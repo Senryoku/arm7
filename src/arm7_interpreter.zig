@@ -76,6 +76,8 @@ fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    std.debug.print("Unimplemented branch and exchange\n", .{});
     @panic("Unimplemented branch and exchange");
 }
 
@@ -172,6 +174,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             }
         } else {
             // STM (1)
+            std.debug.print("Unimplemented STM with s=1\n", .{});
             @panic("Unimplemented STM with s=1");
         }
     }
@@ -200,13 +203,22 @@ fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    @panic("Unimplemented software interrupt");
+    cpu.r_svc[1] = cpu.pc().* - 4; // R14_svc = address of next instruction after the SWI instruction
+    cpu.spsr_svc = cpu.cpsr;
+    cpu.cpsr.m = .Supervisor;
+    cpu.cpsr.t = false; // Execute in ARM state (NOTE: We don't have a way to execute in THUMB state)
+    cpu.cpsr.i = true; // Disable normal interrupts
+
+    // FIXME: Something about high vectors? I guess the interrupt vector can be located at 0xFFFF0000 instead of 0x00000000 in some cases. we don't handle it.
+    cpu.pc().* = 0x00000008;
 }
 
 fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.UndefinedInstruction = @bitCast(instruction);
     if (!handle_condition(cpu, inst.cond))
         return;
+
+    std.debug.print("Undefined instruction\n", .{});
     @panic("Undefined instruction");
 }
 
@@ -233,9 +245,16 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     const addr = if (inst.p == 1) offset_addr else base;
 
-    // In the case of post-indexed addressing (p == 1), the write back bit is redundant and must be set to zero,
+    // In the case of post-indexed addressing (p == 0), the write back bit is redundant and must be set to zero,
     // since the old base value can be retained by setting the offset to zero.
-    std.debug.assert(inst.p != 0 or inst.w == 0);
+    // The only use of the W bit in a post-indexed data transfer is in privileged mode
+    // code, where setting the W bit forces non-privileged mode for the transfer, allowing the
+    // operating system to generate a user address in a system where the memory
+    // management hardware makes suitable use of this hardware.
+    if (inst.w == 1 and inst.p == 0) {
+        // ?? Probably doesn't apply to our use case.
+    }
+
     // Post-indexed data transfers always write back the modified base.
     if (inst.w == 1 or inst.p == 0) cpu.r(inst.rn).* = offset_addr;
 
@@ -273,12 +292,6 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         }
         if (inst.rd == 15) cpu.reset_pipeline();
     }
-
-    // TODO?
-    // The only use of the W bit in a post-indexed data transfer is in privileged mode
-    // code, where setting the W bit forces non-privileged mode for the transfer, allowing the
-    // operating system to generate a user address in a system where the memory
-    // management hardware makes suitable use of this hardware.
 }
 
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
@@ -327,6 +340,7 @@ fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented multiply long\n", .{});
     @panic("Unimplemented multiply long");
 }
 
@@ -335,6 +349,7 @@ fn handle_halfword_data_transfer_register_offset(cpu: *arm7.ARM7, instruction: u
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented halfword data transfer register offset\n", .{});
     @panic("Unimplemented halfword data transfer register offset");
 }
 
@@ -343,6 +358,7 @@ fn handle_halfword_data_transfer_immediate_offset(cpu: *arm7.ARM7, instruction: 
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented halfword data transfer immediate offset\n", .{});
     @panic("Unimplemented halfword data transfer immediate offset");
 }
 
@@ -351,6 +367,7 @@ fn handle_coprocessor_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented coprocessor data transfer\n", .{});
     @panic("Unimplemented coprocessor data transfer");
 }
 
@@ -359,6 +376,7 @@ fn handle_coprocessor_data_operation(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented coprocessor data operation\n", .{});
     @panic("Unimplemented coprocessor data operation");
 }
 
@@ -367,6 +385,7 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
     if (!handle_condition(cpu, inst.cond))
         return;
 
+    std.debug.print("Unimplemented coprocessor register transfer\n", .{});
     @panic("Unimplemented coprocessor register transfer");
 }
 

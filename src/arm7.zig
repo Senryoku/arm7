@@ -437,6 +437,9 @@ const Exception = enum {
 pub const ARM7 = struct {
     memory: []u8,
 
+    memory_address_mask: u32,
+    external_memory_address_threshold: u32,
+
     cpsr: CPSR = .{},
     _r: [16]u32 = undefined,
     r_fiq: [7]u32 = undefined, //  8-14
@@ -471,9 +474,13 @@ pub const ARM7 = struct {
         data: ?*anyopaque = null,
     } = .{},
 
-    pub fn init(memory: []u8) @This() {
+    pub fn init(memory: []u8, memory_address_mask: u32, external_memory_address_threshold: u32) @This() {
         init_jump_table();
-        return .{ .memory = memory };
+        return .{
+            .memory = memory,
+            .memory_address_mask = memory_address_mask,
+            .external_memory_address_threshold = external_memory_address_threshold,
+        };
     }
 
     pub fn reset(self: *@This(), enable: bool) void {
@@ -505,10 +512,13 @@ pub const ARM7 = struct {
         self.running = enable;
     }
 
-    pub fn fiq_interrupt(self: *@This()) void {
+    pub fn fast_interrupt_request(self: *@This()) void {
         // FIXME: This is not the right way to handle interrupts, but right now it looks like
         //        it might be the only one that I care about.
+        self.spsr_fiq = self.cpsr;
         self.cpsr.m = .FastInterrupt;
+        self.cpsr.f = true;
+        self.cpsr.i = true;
         self.lr().* = self.pc().*;
         self.pc().* = 0x1C;
         self.reset_pipeline();
@@ -557,7 +567,7 @@ pub const ARM7 = struct {
     }
 
     pub fn fetch(self: *@This()) u32 {
-        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc().*]))).*;
+        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc().* & self.memory_address_mask]))).*;
         self.pc().* += 4;
         return instr;
     }
@@ -579,18 +589,18 @@ pub const ARM7 = struct {
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
         if (T == u8)
-            if (address >= self.memory.len) return self.on_external_read8.callback(self.on_external_read8.data.?, address);
+            if (address >= self.external_memory_address_threshold) return self.on_external_read8.callback(self.on_external_read8.data.?, address);
         if (T == u32)
-            if (address >= self.memory.len) return self.on_external_read32.callback(self.on_external_read32.data.?, address);
-        return @as(*const T, @alignCast(@ptrCast(&self.memory[address]))).*;
+            if (address >= self.external_memory_address_threshold) return self.on_external_read32.callback(self.on_external_read32.data.?, address);
+        return @as(*const T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).*;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
         if (T == u8)
-            if (address >= self.memory.len) return self.on_external_write8.callback(self.on_external_write8.data.?, address, value);
+            if (address >= self.external_memory_address_threshold) return self.on_external_write8.callback(self.on_external_write8.data.?, address, value);
         if (T == u32)
-            if (address >= self.memory.len) return self.on_external_write32.callback(self.on_external_write32.data.?, address, value);
-        @as(*T, @alignCast(@ptrCast(&self.memory[address]))).* = value;
+            if (address >= self.external_memory_address_threshold) return self.on_external_write32.callback(self.on_external_write32.data.?, address, value);
+        @as(*T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).* = value;
     }
 
     pub fn disassemble(instr: u32) []const u8 {
