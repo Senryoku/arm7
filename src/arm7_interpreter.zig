@@ -220,6 +220,8 @@ fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
 
     // FIXME: Something about high vectors? I guess the interrupt vector can be located at 0xFFFF0000 instead of 0x00000000 in some cases. we don't handle it.
     cpu.pc().* = 0x00000008;
+
+    cpu.reset_pipeline();
 }
 
 fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
@@ -303,6 +305,8 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
+
+    std.debug.assert(inst.rd != 15);
 
     const addr = cpu.r(inst.rn).*;
     const reg = cpu.r(inst.rm).*;
@@ -395,6 +399,8 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
 // Move PSR to general-purpose register
 fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MRSInstruction = @bitCast(instruction);
+
+    std.debug.assert(inst.rd != 15);
 
     if (inst.r == 1) {
         cpu.r(inst.rd).* = @bitCast(cpu.spsr().*);
