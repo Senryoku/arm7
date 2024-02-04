@@ -3,6 +3,19 @@ const arm7_interpreter_log = std.log.scoped(.arm7_interpreter);
 
 const arm7 = @import("arm7.zig");
 
+pub fn execute(self: *arm7.ARM7, instr: u32) void {
+    if (!handle_condition(self, arm7.ARM7.get_instr_condition(instr)))
+        return;
+    const tag = arm7.ARM7.get_instr_tag(instr);
+    InstructionHandlers[arm7.JumpTable[tag]](self, instr);
+}
+
+pub fn tick(self: *arm7.ARM7) void {
+    const instr = self.instruction_pipeline[0];
+    self.instruction_pipeline[0] = self.fetch();
+    execute(self, instr);
+}
+
 pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32) void{
     handle_branch_and_exchange,
     handle_block_data_transfer,

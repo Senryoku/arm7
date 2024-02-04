@@ -562,11 +562,11 @@ pub const ARM7 = struct {
         };
     }
 
-    inline fn get_instr_condition(instruction: u32) Condition {
+    pub inline fn get_instr_condition(instruction: u32) Condition {
         return @enumFromInt(@as(u4, @truncate(instruction >> 28)));
     }
 
-    inline fn get_instr_tag(instruction: u32) u12 {
+    pub inline fn get_instr_tag(instruction: u32) u12 {
         return @truncate(((instruction >> 16) & 0xFF0) | ((instruction >> 4) & 0xF));
     }
 
@@ -576,21 +576,8 @@ pub const ARM7 = struct {
         return instr;
     }
 
-    pub fn execute(self: *@This(), instr: u32) void {
-        if (!interpreter.handle_condition(self, get_instr_condition(instr)))
-            return;
-        const tag = get_instr_tag(instr);
-        interpreter.InstructionHandlers[JumpTable[tag]](self, instr);
-    }
-
     pub fn reset_pipeline(self: *@This()) void {
         self.instruction_pipeline[0] = self.fetch();
-    }
-
-    pub fn tick(self: *@This()) void {
-        const instr = self.instruction_pipeline[0];
-        self.instruction_pipeline[0] = self.fetch();
-        self.execute(instr);
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
@@ -609,11 +596,11 @@ pub const ARM7 = struct {
         @as(*T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).* = value;
     }
 
-    pub fn disassemble(instr: u32) []const u8 {
-        return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
-    }
-
     pub inline fn in_a_privileged_mode(self: *const @This()) bool {
         return self.cpsr.m != .User;
+    }
+
+    pub fn disassemble(instr: u32) []const u8 {
+        return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
     }
 };
