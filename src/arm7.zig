@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-const interpreter = @import("arm7_interpreter.zig");
+pub const interpreter = @import("arm7_interpreter.zig");
 const dissasemble = @import("arm7_disassemble.zig");
 
 pub const RegisterMode = enum(u5) {
@@ -562,6 +562,10 @@ pub const ARM7 = struct {
         };
     }
 
+    inline fn get_instr_condition(instruction: u32) Condition {
+        return @enumFromInt(@as(u4, @truncate(instruction >> 28)));
+    }
+
     inline fn get_instr_tag(instruction: u32) u12 {
         return @truncate(((instruction >> 16) & 0xFF0) | ((instruction >> 4) & 0xF));
     }
@@ -572,7 +576,9 @@ pub const ARM7 = struct {
         return instr;
     }
 
-    fn execute(self: *@This(), instr: u32) void {
+    pub fn execute(self: *@This(), instr: u32) void {
+        if (!interpreter.handle_condition(self, get_instr_condition(instr)))
+            return;
         const tag = get_instr_tag(instr);
         interpreter.InstructionHandlers[JumpTable[tag]](self, instr);
     }

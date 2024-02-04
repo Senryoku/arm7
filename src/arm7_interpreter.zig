@@ -25,7 +25,7 @@ pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32)
     handle_invalid,
 };
 
-inline fn handle_condition(cpu: *arm7.ARM7, cond: arm7.Condition) bool {
+pub inline fn handle_condition(cpu: *arm7.ARM7, cond: arm7.Condition) bool {
     switch (cond) {
         .EQ => return cpu.cpsr.z,
         .NE => return !cpu.cpsr.z,
@@ -73,9 +73,9 @@ pub const ScaledRegisterOffset = packed struct(u12) {
 const STR_STM_store_R15_plus_4 = true;
 
 fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented branch and exchange\n", .{});
     @panic("Unimplemented branch and exchange");
@@ -84,8 +84,6 @@ fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
 // LDM, STM
 fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     const base = cpu.r(inst.rn).*;
 
@@ -182,8 +180,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BranchInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     const offset = arm7.sign_extend(@TypeOf(inst.offset), inst.offset) << 2; // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining)
 
@@ -214,9 +210,9 @@ fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
 }
 
 fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.UndefinedInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Undefined instruction\n", .{});
     @panic("Undefined instruction");
@@ -225,8 +221,6 @@ fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataTransferInstruction = @bitCast(instruction);
     std.debug.assert(inst._tag == 0b01);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
 
@@ -296,8 +290,6 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     const addr = cpu.r(inst.rn).*;
     const reg = cpu.r(inst.rm).*;
@@ -312,8 +304,6 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MultiplyInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     std.debug.assert(inst.rd != inst.rm);
     std.debug.assert(inst.rd != 15);
@@ -336,54 +326,54 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
 }
 
 fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.MultiplyLongInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented multiply long\n", .{});
     @panic("Unimplemented multiply long");
 }
 
 fn handle_halfword_data_transfer_register_offset(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.HalfwordDataTransferRegisterOffsetInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented halfword data transfer register offset\n", .{});
     @panic("Unimplemented halfword data transfer register offset");
 }
 
 fn handle_halfword_data_transfer_immediate_offset(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.HalfwordDataTransferImmediateOffsetInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented halfword data transfer immediate offset\n", .{});
     @panic("Unimplemented halfword data transfer immediate offset");
 }
 
 fn handle_coprocessor_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.CoprocessorDataTransferInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented coprocessor data transfer\n", .{});
     @panic("Unimplemented coprocessor data transfer");
 }
 
 fn handle_coprocessor_data_operation(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.CoprocessorDataOperationInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented coprocessor data operation\n", .{});
     @panic("Unimplemented coprocessor data operation");
 }
 
 fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void {
+    _ = cpu;
     const inst: arm7.CoprocessorRegisterTransferInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
+    _ = inst;
 
     std.debug.print("Unimplemented coprocessor register transfer\n", .{});
     @panic("Unimplemented coprocessor register transfer");
@@ -392,8 +382,6 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
 // Move PSR to general-purpose register
 fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MRSInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     if (inst.r == 1) {
         cpu.r(inst.rd).* = @bitCast(cpu.spsr().*);
@@ -405,8 +393,6 @@ fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
 // Move to Status Register
 fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MSRInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     const UnallocMask: u32 = 0x06F0FC00;
     const UserMask: u32 = 0xF80F0200;
@@ -486,8 +472,6 @@ fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
 
 fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.DataProcessingInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
 
     // TODO: See "Writing to R15"
 
