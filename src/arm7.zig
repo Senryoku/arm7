@@ -500,14 +500,13 @@ pub const ARM7 = struct {
         // 4. Reverts to ARM state if necessary and resumes execution.
         // After reset, all register values except the PC and CPSR are indeterminate.
         if (!self.running and enable) {
-            self.r_svc[1] = self.pc().*;
+            self.r_svc[1] = self.pc();
             self.change_mode(.Supervisor);
             self.cpsr.i = true;
             self.cpsr.f = true;
             self.cpsr.t = false;
 
-            self.pc().* = 0x00;
-            self.reset_pipeline();
+            self.set_pc(0x00);
         }
         self.running = enable;
     }
@@ -568,24 +567,32 @@ pub const ARM7 = struct {
         self.change_mode(.FastInterrupt);
         self.cpsr.f = true;
         self.cpsr.i = true;
-        self.lr().* = self.pc().*;
-        self.pc().* = 0x1C;
-        self.reset_pipeline();
+        self.set_lr(self.pc());
+        self.set_pc(0x1C);
     }
 
     // Stack Pointer
-    pub inline fn sp(self: *@This()) *u32 {
-        return &self.r[13];
+    pub inline fn sp(self: *@This()) u32 {
+        return self.r[13];
     }
 
     // Link Register
-    pub inline fn lr(self: *@This()) *u32 {
-        return &self.r[14];
+    pub inline fn lr(self: *@This()) u32 {
+        return self.r[14];
+    }
+
+    pub inline fn set_lr(self: *@This(), new_value: u32) void {
+        self.r[14] = new_value;
     }
 
     // Program Counter
-    pub inline fn pc(self: *@This()) *u32 {
-        return &self.r[15];
+    pub inline fn pc(self: *@This()) u32 {
+        return self.r[15];
+    }
+
+    pub inline fn set_pc(self: *@This(), new_value: u32) void {
+        self.r[15] = new_value;
+        self.reset_pipeline();
     }
 
     pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
@@ -612,8 +619,8 @@ pub const ARM7 = struct {
     }
 
     pub fn fetch(self: *@This()) u32 {
-        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc().* & self.memory_address_mask]))).*;
-        self.pc().* += 4;
+        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
+        self.r[15] += 4;
         return instr;
     }
 

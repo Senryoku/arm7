@@ -135,8 +135,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             }
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
-                cpu.pc().* = value & 0xFFFFFFFC;
-                cpu.reset_pipeline();
+                cpu.set_pc(value & 0xFFFFFFFC);
                 cpu.cpsr.t = value & 1 == 1;
                 addr += 4;
             }
@@ -203,8 +202,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                     }
                 }
                 cpu.restore_cpsr();
-                cpu.pc().* = cpu.read(u32, addr) & 0xFFFFFFFC;
-                cpu.reset_pipeline();
+                cpu.set_pc(cpu.read(u32, addr) & 0xFFFFFFFC);
             }
         } else {
             // STM (1)
@@ -222,12 +220,10 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     // Branch with link
     // Saves PC to R14 (LR)
     if (inst.l == 1) {
-        cpu.lr().* = (cpu.pc().* - 4) & 0xFFFFFFFC;
+        cpu.set_lr((cpu.pc() - 4) & 0xFFFFFFFC);
     }
 
-    cpu.pc().* +%= offset;
-
-    cpu.reset_pipeline();
+    cpu.set_pc(cpu.pc() +% offset);
 }
 
 fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
@@ -235,15 +231,13 @@ fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
     if (!handle_condition(cpu, inst.cond))
         return;
 
-    cpu.r_svc[1] = cpu.pc().* - 4; // R14_svc = address of next instruction after the SWI instruction
+    cpu.r_svc[1] = cpu.pc() - 4; // R14_svc = address of next instruction after the SWI instruction
     cpu.change_mode(.Supervisor);
     cpu.cpsr.t = false; // Execute in ARM state (NOTE: We don't have a way to execute in THUMB state)
     cpu.cpsr.i = true; // Disable normal interrupts
 
     // FIXME: Something about high vectors? I guess the interrupt vector can be located at 0xFFFF0000 instead of 0x00000000 in some cases. we don't handle it.
-    cpu.pc().* = 0x00000008;
-
-    cpu.reset_pipeline();
+    cpu.set_pc(0x00000008);
 }
 
 fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
@@ -703,7 +697,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
 }
 
 fn handle_invalid(cpu: *arm7.ARM7, instruction: u32) void {
-    arm7_interpreter_log.err("Invalid Instruction @{X:0>8}: {X:0>8} {b:0>32}", .{ cpu.pc().* - 8, instruction, instruction });
+    arm7_interpreter_log.err("Invalid Instruction @{X:0>8}: {X:0>8} {b:0>32}", .{ cpu.pc() - 8, instruction, instruction });
 }
 
 const barrel_shifter_result = struct { shifter_operand: u32, shifter_carry_out: bool };
