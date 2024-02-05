@@ -441,8 +441,10 @@ pub const ARM7 = struct {
     external_memory_address_threshold: u32,
 
     cpsr: CPSR = .{},
-    _r: [16]u32 = undefined,
-    r_fiq: [7]u32 = undefined, //  8-14
+    r: [16]u32 = undefined,
+    r_fiq_8_12: [5]u32 = undefined, //  8-12
+    r_usr: [2]u32 = undefined,
+    r_fiq: [2]u32 = undefined, // 13-14
     r_svc: [2]u32 = undefined, // 13-14
     r_irq: [2]u32 = undefined, // 13-14
     r_abt: [2]u32 = undefined, // 13-14
@@ -499,9 +501,7 @@ pub const ARM7 = struct {
         // After reset, all register values except the PC and CPSR are indeterminate.
         if (!self.running and enable) {
             self.r_svc[1] = self.pc().*;
-            self.spsr_svc = self.cpsr;
-
-            self.cpsr.m = .Supervisor;
+            self.change_mode(.Supervisor);
             self.cpsr.i = true;
             self.cpsr.f = true;
             self.cpsr.t = false;
@@ -512,11 +512,60 @@ pub const ARM7 = struct {
         self.running = enable;
     }
 
+    pub fn set_cpsr(self: *@This(), cpsr: CPSR) void {
+        self.change_mode(cpsr.m);
+        self.cpsr = cpsr;
+    }
+
+    pub fn restore_cpsr(self: *@This()) void {
+        self.set_cpsr(self.spsr().*);
+    }
+
+    pub fn banked_regs(self: *@This(), mode: RegisterMode) []u32 {
+        return switch (mode) {
+            .User, .System => &self.r_usr,
+            .FastInterrupt => &self.r_fiq,
+            .Interrupt => &self.r_irq,
+            .Supervisor => &self.r_svc,
+            .Abort => &self.r_abt,
+            .Undefined => &self.r_und,
+        };
+    }
+
+    pub fn change_mode(self: *@This(), mode: RegisterMode) void {
+        const prev_mode = self.cpsr.m;
+        if (prev_mode == mode)
+            return;
+
+        if (mode != .User and mode != .System) {
+            self.spsr_for(mode).* = self.cpsr;
+        }
+
+        // Save registers of the previous mode.
+        const save_to = self.banked_regs(prev_mode);
+
+        // Restore registers for the new one.
+        const restore_from = self.banked_regs(mode);
+
+        save_to[0] = self.r[13];
+        save_to[1] = self.r[14];
+
+        self.r[13] = restore_from[0];
+        self.r[14] = restore_from[1];
+
+        if (prev_mode == .FastInterrupt or mode == .FastInterrupt) {
+            for (0..5) |i| {
+                std.mem.swap(u32, &self.r[8 + i], &self.r_fiq_8_12[i]);
+            }
+        }
+
+        self.cpsr.m = mode;
+    }
+
     pub fn fast_interrupt_request(self: *@This()) void {
         // FIXME: This is not the right way to handle interrupts, but right now it looks like
         //        it might be the only one that I care about.
-        self.spsr_fiq = self.cpsr;
-        self.cpsr.m = .FastInterrupt;
+        self.change_mode(.FastInterrupt);
         self.cpsr.f = true;
         self.cpsr.i = true;
         self.lr().* = self.pc().*;
@@ -524,42 +573,34 @@ pub const ARM7 = struct {
         self.reset_pipeline();
     }
 
-    pub inline fn r(self: *@This(), index: u5) *u32 {
-        // NOTE: We could only use _r and actually swap value when the mode change. Worth testing later.
-        return switch (self.cpsr.m) {
-            .User, .System => &self._r[index],
-            .FastInterrupt => if (index >= 8 and index <= 14) &self.r_fiq[index - 8] else &self._r[index],
-            .Interrupt => if (index >= 13 and index <= 14) &self.r_irq[index - 13] else &self._r[index],
-            .Supervisor => if (index >= 13 and index <= 14) &self.r_svc[index - 13] else &self._r[index],
-            .Abort => if (index >= 13 and index <= 14) &self.r_abt[index - 13] else &self._r[index],
-            .Undefined => if (index >= 13 and index <= 14) &self.r_und[index - 13] else &self._r[index],
-        };
-    }
-
     // Stack Pointer
     pub inline fn sp(self: *@This()) *u32 {
-        return self.r(13);
+        return &self.r[13];
     }
 
     // Link Register
     pub inline fn lr(self: *@This()) *u32 {
-        return self.r(14);
+        return &self.r[14];
     }
 
     // Program Counter
     pub inline fn pc(self: *@This()) *u32 {
-        return self.r(15);
+        return &self.r[15];
     }
 
-    pub inline fn spsr(self: *@This()) *CPSR {
-        return switch (self.cpsr.m) {
-            .User, .System => @panic("Attempt to access SPSR in User/System mode"),
+    pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
+        return switch (mode) {
+            .User, .System => @panic("Attempt to access SPSR of User/System mode"),
             .FastInterrupt => &self.spsr_fiq,
             .Interrupt => &self.spsr_irq,
             .Supervisor => &self.spsr_svc,
             .Abort => &self.spsr_abt,
             .Undefined => &self.spsr_und,
         };
+    }
+
+    pub inline fn spsr(self: *@This()) *CPSR {
+        return self.spsr_for(self.cpsr.m);
     }
 
     pub inline fn get_instr_condition(instruction: u32) Condition {
