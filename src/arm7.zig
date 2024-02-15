@@ -2,7 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 
 pub const interpreter = @import("arm7_interpreter.zig");
-const dissasemble = @import("arm7_disassemble.zig");
+pub const dissasemble = @import("arm7_disassemble.zig");
 
 pub const RegisterMode = enum(u5) {
     User = 0b10000,
