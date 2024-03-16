@@ -226,11 +226,7 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     cpu.set_pc(cpu.pc() +% offset);
 }
 
-fn handle_software_interrupt(cpu: *arm7.ARM7, instruction: u32) void {
-    const inst: arm7.SoftwareInterruptInstruction = @bitCast(instruction);
-    if (!handle_condition(cpu, inst.cond))
-        return;
-
+fn handle_software_interrupt(cpu: *arm7.ARM7, _: u32) void {
     cpu.r_svc[1] = cpu.pc() - 4; // R14_svc = address of next instruction after the SWI instruction
     cpu.change_mode(.Supervisor);
     cpu.cpsr.t = false; // Execute in ARM state (NOTE: We don't have a way to execute in THUMB state)
