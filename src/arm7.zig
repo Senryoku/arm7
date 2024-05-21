@@ -455,6 +455,7 @@ pub const ARM7 = struct {
     spsr_abt: CPSR = .{},
     spsr_und: CPSR = .{},
 
+    thumb_instruction_pipeline: [1]u16 = undefined,
     instruction_pipeline: [1]u32 = undefined,
 
     running: bool = false,
@@ -592,7 +593,11 @@ pub const ARM7 = struct {
 
     pub inline fn set_pc(self: *@This(), new_value: u32) void {
         self.r[15] = new_value;
-        self.reset_pipeline();
+        if (self.cpsr.t) {
+            self.reset_thumb_pipeline();
+        } else {
+            self.reset_pipeline();
+        }
     }
 
     pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
@@ -618,14 +623,24 @@ pub const ARM7 = struct {
         return @truncate(((instruction >> 16) & 0xFF0) | ((instruction >> 4) & 0xF));
     }
 
-    pub fn fetch(self: *@This()) u32 {
+    pub inline fn fetch(self: *@This()) u32 {
         const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
         self.r[15] += 4;
         return instr;
     }
 
-    pub fn reset_pipeline(self: *@This()) void {
+    pub inline fn reset_pipeline(self: *@This()) void {
         self.instruction_pipeline[0] = self.fetch();
+    }
+
+    pub inline fn thumb_fetch(self: *@This()) u16 {
+        const instr = @as(*const u16, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
+        self.r[15] += 2;
+        return instr;
+    }
+
+    pub inline fn reset_thumb_pipeline(self: *@This()) void {
+        self.thumb_instruction_pipeline[0] = self.thumb_fetch();
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
@@ -648,7 +663,11 @@ pub const ARM7 = struct {
         return self.cpsr.m != .User;
     }
 
-    pub fn disassemble(instr: u32) []const u8 {
-        return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
+    pub fn disassemble(self: *const @This()) []const u8 {
+        if (self.cpsr.t) {
+            return "Thumb";
+        } else {
+            return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(self.instruction_pipeline[0])]](self.instruction_pipeline[0]);
+        }
     }
 };

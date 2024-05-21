@@ -128,9 +128,9 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
 }
 
 fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
-    _ = instruction;
-
-    return "BranchAndExchange";
+    const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
+    const cond = disassemble_condition(inst.cond);
+    return std.fmt.bufPrint(&disassemble_temp, "bx{s} R{d}", .{ cond, inst.rm }) catch unreachable;
 }
 
 fn disassemble_block_data_transfer(instruction: u32) []const u8 {

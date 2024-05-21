@@ -2,6 +2,7 @@ const std = @import("std");
 const arm7_interpreter_log = std.log.scoped(.arm7_interpreter);
 
 const arm7 = @import("arm7.zig");
+const thumb_interpreter = @import("arm7_thumb_interpreter.zig");
 
 pub fn execute(self: *arm7.ARM7, instr: u32) void {
     if (!handle_condition(self, arm7.ARM7.get_instr_condition(instr)))
@@ -11,9 +12,15 @@ pub fn execute(self: *arm7.ARM7, instr: u32) void {
 }
 
 pub fn tick(self: *arm7.ARM7) void {
-    const instr = self.instruction_pipeline[0];
-    self.instruction_pipeline[0] = self.fetch();
-    execute(self, instr);
+    if (self.cpsr.t) {
+        const instr = self.thumb_instruction_pipeline[0];
+        self.thumb_instruction_pipeline[0] = self.thumb_fetch();
+        thumb_interpreter.execute(self, instr);
+    } else {
+        const instr = self.instruction_pipeline[0];
+        self.instruction_pipeline[0] = self.fetch();
+        execute(self, instr);
+    }
 }
 
 pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32) void{
@@ -86,12 +93,10 @@ pub const ScaledRegisterOffset = packed struct(u12) {
 const STR_STM_store_R15_plus_4 = true;
 
 fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
-    _ = cpu;
     const inst: arm7.BranchAndExchangeInstruction = @bitCast(instruction);
-    _ = inst;
 
-    std.debug.print("Unimplemented branch and exchange\n", .{});
-    @panic("Unimplemented branch and exchange");
+    cpu.cpsr.t = cpu.r[inst.rm] & 1 == 1;
+    cpu.set_pc(cpu.r[inst.rm] & 0xFFFFFFFE);
 }
 
 // LDM, STM
@@ -826,7 +831,7 @@ pub inline fn operand_2_immediate(cpu: *arm7.ARM7, operand2: u12) barrel_shifter
     };
 }
 
-// Arithmetic Shift Right. Register contents are treatedas two's complement signed integers. The sign bit is copied into vacated bits.
+// Arithmetic Shift Right. Register contents are treated as two's complement signed integers. The sign bit is copied into vacated bits.
 inline fn arithmetic_shift_right(val: u32, shift_amount: u5) u32 {
     if (val & 0x80000000 != 0) {
         return ~(~val >> shift_amount);
