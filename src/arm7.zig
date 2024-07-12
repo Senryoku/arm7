@@ -620,7 +620,7 @@ pub const ARM7 = struct {
 
     pub fn fetch(self: *@This()) u32 {
         const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
-        self.r[15] += 4;
+        self.r[15] +%= 4;
         return instr;
     }
 
