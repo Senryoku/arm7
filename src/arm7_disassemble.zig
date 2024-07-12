@@ -179,7 +179,7 @@ fn disassemble_single_data_transfer(instruction: u32) []const u8 {
     const expr = disassemble_addr_mode_2(instr);
 
     return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s}{s} {s},{s}{s}", .{
-        if (instr.l == 1) "ltr" else "str",
+        if (instr.l == 1) "ldr" else "str",
         cond,
         if (instr.b == 1) "b" else "",
         if (false) "t" else "", // FIXME: I don't how it works yet.
