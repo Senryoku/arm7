@@ -215,7 +215,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BranchInstruction = @bitCast(instruction);
 
-    const offset = arm7.sign_extend(@TypeOf(inst.offset), inst.offset) << 2; // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining)
+    const offset = arm7.sign_extend(u26, @as(u26, @intCast(inst.offset)) << 2); // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining)
 
     // Branch with link
     // Saves PC to R14 (LR)
