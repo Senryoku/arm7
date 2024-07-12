@@ -4,6 +4,8 @@ const testing = std.testing;
 pub const interpreter = @import("arm7_interpreter.zig");
 pub const dissasemble = @import("arm7_disassemble.zig");
 
+const arm7_log = std.log.scoped(.arm7);
+
 pub const RegisterMode = enum(u5) {
     User = 0b10000,
     FastInterrupt = 0b10001,
@@ -562,6 +564,10 @@ pub const ARM7 = struct {
     }
 
     pub fn fast_interrupt_request(self: *@This()) void {
+        if (self.cpsr.m == .FastInterrupt) {
+            arm7_log.warn("Fast interrupt already requested, ignoring.", .{});
+            return;
+        }
         // FIXME: This is not the right way to handle interrupts, but right now it looks like
         //        it might be the only one that I care about.
         self.change_mode(.FastInterrupt);
