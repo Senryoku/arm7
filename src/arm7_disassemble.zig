@@ -64,7 +64,7 @@ fn disassemble_condition(cond: arm7.Condition) []const u8 {
         .GT => "gt",
         .LE => "le",
         .AL => "",
-        else => return "und",
+        else => "_err",
     };
 }
 

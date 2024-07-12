@@ -55,7 +55,7 @@ pub inline fn handle_condition(cpu: *arm7.ARM7, cond: arm7.Condition) bool {
         .GT => return !cpu.cpsr.z and (cpu.cpsr.n == cpu.cpsr.v),
         .LE => return cpu.cpsr.z or (cpu.cpsr.n != cpu.cpsr.v),
         .AL => return true,
-        .Invalid => unreachable,
+        .Invalid => @panic("Invalid condition"),
     }
     return true;
 }
