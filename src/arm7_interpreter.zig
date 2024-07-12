@@ -214,15 +214,19 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
 fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BranchInstruction = @bitCast(instruction);
+    const offset = arm7.sign_extend(u26, @as(u26, @intCast(inst.offset)) << 2);
 
-    const offset = arm7.sign_extend(u26, @as(u26, @intCast(inst.offset)) << 2); // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining)
-
-    // Branch with link
-    // Saves PC to R14 (LR)
+    // Branch with link, Saves PC to R14 (LR)
+    // "Branch with Link (BL) writes the old PC into the link register (R14) of the current bank.
+    //  The PC value written into R14 is adjusted to allow for the prefetch, and contains the
+    //  address of the instruction following the branch and link instruction. Note that the CPSR
+    //  is not saved with the PC and R14[1:0] are always cleared.""
     if (inst.l == 1) {
         cpu.set_lr((cpu.pc() - 4) & 0xFFFFFFFC);
     }
 
+    // NOTE: The value in PC is actually this instruction address + 8 (due to pipelining), this is intended.
+    // "The branch offset must take account of the prefetch operation, which causes the PC to be 2 words (8 bytes) ahead of the current instruction"
     cpu.set_pc(cpu.pc() +% offset);
 }
 
