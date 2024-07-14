@@ -505,6 +505,7 @@ pub const ARM7 = struct {
         // After reset, all register values except the PC and CPSR are indeterminate.
         if (!self.running and enable) {
             self.r_svc[1] = self.pc();
+            self.save_cpsr(.Supervisor);
             self.change_mode(.Supervisor);
             self.cpsr.i = true;
             self.cpsr.f = true;
@@ -535,14 +536,18 @@ pub const ARM7 = struct {
         };
     }
 
-    pub fn change_mode(self: *@This(), mode: RegisterMode) void {
-        const prev_mode = self.cpsr.m;
-        if (prev_mode == mode)
-            return;
-
+    // Saves CPSR to SPSR of the supplied mode (used by interrupt before changing to the new mode)
+    fn save_cpsr(self: *@This(), mode: RegisterMode) void {
         if (mode != .User and mode != .System) {
             self.spsr_for(mode).* = self.cpsr;
         }
+    }
+
+    pub fn change_mode(self: *@This(), mode: RegisterMode) void {
+        const prev_mode = self.cpsr.m;
+
+        if (prev_mode == mode)
+            return;
 
         // Save registers of the previous mode.
         const save_to = self.banked_regs(prev_mode);
@@ -568,12 +573,19 @@ pub const ARM7 = struct {
     pub fn check_fiq(self: *@This()) void {
         //                         FIQ disabled.
         if (self.fiq_signaled and !self.cpsr.f) {
-            const was_fiq = self.cpsr.m == .FastInterrupt;
+
+            // When a FIQ is detected, ARM7DI:
+            // (1) Saves the address of the next instruction to be executed plus 4 in R14_fiq; saves CPSR in SPSR_fiq
+            // (2) Forces M[4:0]=10001 (FIQ mode) and sets the F and I bits in the CPSR
+            // (3) Forces the PC to fetch the next instruction from address 0x1C
+
+            // NOTE: The order here is slightly different because of how change_mode works, but the result should be the same.
+
+            self.save_cpsr(.FastInterrupt);
             self.change_mode(.FastInterrupt);
             self.cpsr.f = true;
             self.cpsr.i = true;
-            if (!was_fiq) // Prevent a re-entry in Crazy Taxi. IDK, the issue might be else where...
-                self.set_lr(self.pc());
+            self.set_lr(self.pc());
             self.set_pc(0x1C);
         }
     }
