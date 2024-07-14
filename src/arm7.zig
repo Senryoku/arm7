@@ -564,12 +564,12 @@ pub const ARM7 = struct {
     }
 
     pub fn fast_interrupt_request(self: *@This()) void {
-        if (self.cpsr.m == .FastInterrupt) {
-            arm7_log.warn("Fast interrupt already requested, ignoring.", .{});
-            return;
-        }
-        // FIXME: This is not the right way to handle interrupts, but right now it looks like
-        //        it might be the only one that I care about.
+        // FIQ disabled.
+        if (self.cpsr.f) return;
+
+        // FIXME: This is not the right way to handle interrupts, the value
+        //        of the nFIQ (and nIRQ) line should be checked after each intruction.
+        //        However this is way more efficient. I hope this is enough :^)
         self.change_mode(.FastInterrupt);
         self.cpsr.f = true;
         self.cpsr.i = true;
