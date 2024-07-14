@@ -14,6 +14,7 @@ pub fn tick(self: *arm7.ARM7) void {
     const instr = self.instruction_pipeline[0];
     self.instruction_pipeline[0] = self.fetch();
     execute(self, instr);
+    self.check_fiq();
 }
 
 pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32) void{

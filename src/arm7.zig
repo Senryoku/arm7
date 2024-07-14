@@ -459,6 +459,8 @@ pub const ARM7 = struct {
 
     instruction_pipeline: [1]u32 = undefined,
 
+    fiq_signaled: bool = false,
+
     running: bool = false,
 
     on_external_read8: struct {
@@ -563,18 +565,17 @@ pub const ARM7 = struct {
         self.cpsr.m = mode;
     }
 
-    pub fn fast_interrupt_request(self: *@This()) void {
-        // FIQ disabled.
-        if (self.cpsr.f) return;
-
-        // FIXME: This is not the right way to handle interrupts, the value
-        //        of the nFIQ (and nIRQ) line should be checked after each intruction.
-        //        However this is way more efficient. I hope this is enough :^)
-        self.change_mode(.FastInterrupt);
-        self.cpsr.f = true;
-        self.cpsr.i = true;
-        self.set_lr(self.pc());
-        self.set_pc(0x1C);
+    pub fn check_fiq(self: *@This()) void {
+        //                         FIQ disabled.
+        if (self.fiq_signaled and !self.cpsr.f) {
+            const was_fiq = self.cpsr.m == .FastInterrupt;
+            self.change_mode(.FastInterrupt);
+            self.cpsr.f = true;
+            self.cpsr.i = true;
+            if (!was_fiq) // Prevent a re-entry in Crazy Taxi. IDK, the issue might be else where...
+                self.set_lr(self.pc());
+            self.set_pc(0x1C);
+        }
     }
 
     // Stack Pointer
