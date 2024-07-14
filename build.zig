@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
         .name = "arm7",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/arm7.zig" },
+        .root_source_file = b.path("src/arm7.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -28,13 +28,13 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
-    const arm7_module = b.createModule(.{ .root_source_file = .{ .path = "src/arm7.zig" } });
+    const arm7_module = b.createModule(.{ .root_source_file = b.path("src/arm7.zig") });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const lib_unit_tests = b.addTest(.{
         .name = "arm7_tests",
-        .root_source_file = .{ .path = "src/arm7.zig" },
+        .root_source_file = b.path("src/arm7.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -56,7 +56,7 @@ pub fn build(b: *std.Build) void {
 fn add_test(b: *std.Build, comptime name: []const u8, comptime entry: []const u8, arm7_lib: *std.Build.Step, arm7_module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Run {
     const exe = b.addTest(.{
         .name = name,
-        .root_source_file = .{ .path = entry },
+        .root_source_file = b.path(entry),
         .target = target,
         .optimize = optimize,
     });
