@@ -439,8 +439,8 @@ const Exception = enum {
 pub const ARM7 = struct {
     memory: []u8,
 
-    memory_address_mask: u32,
-    external_memory_address_threshold: u32,
+    memory_address_mask: u32, // Bits used for internal memory addressing (should mask anything outisde of memory.len)
+    external_memory_address_mask: u32, // Bit(s) used to signal external memory access. If (addr & external_memory_address_mask) != 0, we'll use the external callbacks.
 
     cpsr: CPSR = .{},
     r: [16]u32 = undefined,
@@ -480,12 +480,12 @@ pub const ARM7 = struct {
         data: ?*anyopaque = null,
     } = .{},
 
-    pub fn init(memory: []u8, memory_address_mask: u32, external_memory_address_threshold: u32) @This() {
+    pub fn init(memory: []u8, memory_address_mask: u32, external_memory_address_mask: u32) @This() {
         init_jump_table();
         return .{
             .memory = memory,
             .memory_address_mask = memory_address_mask,
-            .external_memory_address_threshold = external_memory_address_threshold,
+            .external_memory_address_mask = external_memory_address_mask,
         };
     }
 
@@ -648,18 +648,20 @@ pub const ARM7 = struct {
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
-        if (T == u8)
-            if (address >= self.external_memory_address_threshold) return self.on_external_read8.callback(self.on_external_read8.data.?, address);
-        if (T == u32)
-            if (address >= self.external_memory_address_threshold) return self.on_external_read32.callback(self.on_external_read32.data.?, address);
+        if (address & self.external_memory_address_mask != 0) switch (T) {
+            u8 => return self.on_external_read8.callback(self.on_external_read8.data.?, address),
+            u32 => return self.on_external_read32.callback(self.on_external_read32.data.?, address),
+            else => @compileError("Unsupported type: " ++ @typeName(T)),
+        };
         return @as(*const T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).*;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
-        if (T == u8)
-            if (address >= self.external_memory_address_threshold) return self.on_external_write8.callback(self.on_external_write8.data.?, address, value);
-        if (T == u32)
-            if (address >= self.external_memory_address_threshold) return self.on_external_write32.callback(self.on_external_write32.data.?, address, value);
+        if (address & self.external_memory_address_mask != 0) switch (T) {
+            u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, address, value),
+            u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, address, value),
+            else => @compileError("Unsupported type: " ++ @typeName(T)),
+        };
         @as(*T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).* = value;
     }
 
