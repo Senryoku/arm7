@@ -28,7 +28,11 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
-    const arm7_module = b.createModule(.{ .root_source_file = b.path("src/arm7.zig") });
+    const arm7_module = b.addModule("arm7", .{
+        .root_source_file = b.path("src/arm7.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
