@@ -672,4 +672,50 @@ pub const ARM7 = struct {
     pub fn disassemble(instr: u32) []const u8 {
         return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
     }
+
+    pub fn serialize(self: *const @This(), writer: anytype) !usize {
+        var bytes: usize = 0;
+        bytes += try writer.write(std.mem.asBytes(&self.memory_address_mask));
+        bytes += try writer.write(std.mem.asBytes(&self.external_memory_address_mask));
+        bytes += try writer.write(std.mem.asBytes(&self.cpsr));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_fiq_8_12[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_usr[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_fiq[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_svc[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_irq[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_abt[0..]));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.r_und[0..]));
+        bytes += try writer.write(std.mem.asBytes(&self.spsr_irq));
+        bytes += try writer.write(std.mem.asBytes(&self.spsr_svc));
+        bytes += try writer.write(std.mem.asBytes(&self.spsr_fiq));
+        bytes += try writer.write(std.mem.asBytes(&self.spsr_abt));
+        bytes += try writer.write(std.mem.asBytes(&self.spsr_und));
+        bytes += try writer.write(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
+        bytes += try writer.write(std.mem.asBytes(&self.running));
+        return bytes;
+    }
+
+    pub fn deserialize(self: *@This(), reader: anytype) !usize {
+        var bytes: usize = 0;
+        bytes += try reader.read(std.mem.asBytes(&self.memory_address_mask));
+        bytes += try reader.read(std.mem.asBytes(&self.external_memory_address_mask));
+        bytes += try reader.read(std.mem.asBytes(&self.cpsr));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_fiq_8_12[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_usr[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_fiq[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_svc[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_irq[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_abt[0..]));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.r_und[0..]));
+        bytes += try reader.read(std.mem.asBytes(&self.spsr_irq));
+        bytes += try reader.read(std.mem.asBytes(&self.spsr_svc));
+        bytes += try reader.read(std.mem.asBytes(&self.spsr_fiq));
+        bytes += try reader.read(std.mem.asBytes(&self.spsr_abt));
+        bytes += try reader.read(std.mem.asBytes(&self.spsr_und));
+        bytes += try reader.read(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
+        bytes += try reader.read(std.mem.asBytes(&self.running));
+        return bytes;
+    }
 };
