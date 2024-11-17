@@ -1,0 +1,33 @@
+name: Single Step Tests
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  repository: SingleStepTests/ARM7TDMI 
+                  path: tests_json
+            - name: Move JSON test files to temp directory
+              run: mkdir /home/runner/dev && mv tests_json /home/runner/dev/tests_json/
+            - name: Transcode JSON test files
+              working-directory: /home/runner/dev/tests_json/
+              run: python ./transcode_json.py
+            - name: Move JSON test files to final location
+              run: mv /home/runner/dev/tests_json/ ../tests_json/
+            - uses: actions/checkout@v4
+              with:
+                submodules: 'true'
+            - name: Get zig version
+              id: zigversion
+              run: echo "version=$(cat .zigversion)" >> $GITHUB_OUTPUT
+            - uses: mlugg/setup-zig@v1
+              with:
+                version: ${{ steps.zigversion.outputs.version }}
+            - run: zig build sh4_test --summary all

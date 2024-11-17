@@ -439,7 +439,7 @@ const Exception = enum {
 pub const ARM7 = struct {
     memory: []u8,
 
-    memory_address_mask: u32, // Bits used for internal memory addressing (should mask anything outisde of memory.len)
+    memory_address_mask: u32, // Bits used for internal memory addressing (should mask anything outside of memory.len)
     external_memory_address_mask: u32, // Bit(s) used to signal external memory access. If (addr & external_memory_address_mask) != 0, we'll use the external callbacks.
 
     cpsr: CPSR = .{},
