@@ -142,8 +142,8 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             }
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
-                cpu.set_pc(value & 0xFFFFFFFC);
-                cpu.cpsr.t = value & 1 == 1;
+                cpu.set_pc(value);
+                // cpu.cpsr.t = value & 1 == 1; // FIXME: If can't find the source of this anymore...
                 addr += 4;
             }
         } else {
@@ -159,10 +159,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
                     cpu.write(u32, addr, value);
                     addr += 4;
-                    //if Shared(address) then /* from ARMv6 */
-                    //   physical_address = TLB(address)
-                    //   ClearExclusiveByAddress(physical_address,processor_id,4)
-                    // /* See Summary of operation on page A2-49 *
                 }
             }
         }
@@ -192,11 +188,13 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                     }
                 }
                 if (inst.reg(13)) {
-                    cpu.banked_regs(.User)[0] = cpu.read(u32, addr);
+                    cpu.banked_regs(cpu.cpsr.m)[0] = cpu.read(u32, addr);
+                    if (cpu.cpsr.m == .User or cpu.cpsr.m == .System) cpu.r[13] = cpu.banked_regs(.User)[0];
                     addr += 4;
                 }
                 if (inst.reg(14)) {
-                    cpu.banked_regs(.User)[1] = cpu.read(u32, addr);
+                    cpu.banked_regs(cpu.cpsr.m)[1] = cpu.read(u32, addr);
+                    if (cpu.cpsr.m == .User or cpu.cpsr.m == .System) cpu.r[14] = cpu.banked_regs(.User)[1];
                     addr += 4;
                 }
             } else {
@@ -267,7 +265,7 @@ fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.UndefinedInstruction = @bitCast(instruction);
     _ = inst;
 
-    std.debug.print("Undefined instruction\n", .{});
+    std.debug.print("Undefined instruction: {X:0>8}\n", .{instruction});
     @panic("Undefined instruction");
 }
 

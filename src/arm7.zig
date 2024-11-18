@@ -522,7 +522,8 @@ pub const ARM7 = struct {
     }
 
     pub fn restore_cpsr(self: *@This()) void {
-        self.set_cpsr(self.spsr().*);
+        if (self.cpsr.m != .User and self.cpsr.m != .System)
+            self.set_cpsr(self.spsr().*);
     }
 
     pub fn banked_regs(self: *@This(), mode: RegisterMode) []u32 {
