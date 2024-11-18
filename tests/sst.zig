@@ -23,7 +23,7 @@ const CPUState = struct {
     R_irq: []u32,
     R_und: []u32,
     CPSR: u32,
-    SPCR: u32,
+    SPSR: []u32,
     pipeline: []u32,
 
     fn log(self: *const @This()) void {
@@ -46,35 +46,56 @@ fn compare_state(cpu: *const arm7.ARM7, expected_state: *const CPUState) void {
     for (0..16) |i| {
         if (cpu.r[i] != expected_state.R[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r[i], expected_state.R[i] });
+        if (i % 4 == 3) std.debug.print("\n", .{});
     }
+    std.debug.print("\n", .{});
     for (0..5) |i| {
         if (cpu.r_fiq_8_12[i] != expected_state.R_fiq[i]) std.debug.print("\u{001b}[31m", .{});
-        std.debug.print("  R_fiq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_fiq[i], expected_state.R_fiq[i] });
+        std.debug.print("  R_fiq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_fiq_8_12[i], expected_state.R_fiq[i] });
     }
+    std.debug.print("\n", .{});
     for (0..2) |i| {
         if (cpu.r_fiq[i] != expected_state.R_fiq[5 + i]) std.debug.print("\u{001b}[31m", .{});
-        std.debug.print("  R_fiq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ 5 + i, cpu.r_fiq_8_12[i], expected_state.R_fiq[5 + i] });
+        std.debug.print("  R_fiq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ 5 + i, cpu.r_fiq[i], expected_state.R_fiq[5 + i] });
     }
+    std.debug.print("\n", .{});
     for (0..2) |i| {
         if (cpu.r_svc[i] != expected_state.R_svc[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R_svc{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_svc[i], expected_state.R_svc[i] });
     }
+    std.debug.print("\n", .{});
     for (0..2) |i| {
         if (cpu.r_abt[i] != expected_state.R_abt[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R_abt{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_abt[i], expected_state.R_abt[i] });
     }
+    std.debug.print("\n", .{});
     for (0..2) |i| {
         if (cpu.r_irq[i] != expected_state.R_irq[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R_irq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_irq[i], expected_state.R_irq[i] });
     }
+    std.debug.print("\n", .{});
     for (0..2) |i| {
         if (cpu.r_und[i] != expected_state.R_und[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R_und{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_und[i], expected_state.R_und[i] });
     }
+    std.debug.print("\n", .{});
+
     if (@as(u32, @bitCast(cpu.cpsr)) != expected_state.CPSR) std.debug.print("\u{001b}[31m", .{});
     std.debug.print("  CPSR: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.cpsr)), expected_state.CPSR });
-    if (@as(u32, @bitCast(@constCast(cpu).spsr().*)) != expected_state.SPCR) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(@constCast(cpu).spsr().*)), expected_state.SPCR });
+
+    std.debug.print("\n", .{});
+
+    if (@as(u32, @bitCast(cpu.spsr_fiq)) != expected_state.SPSR[1]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_fiq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_fiq)), expected_state.SPSR[1] });
+    if (@as(u32, @bitCast(cpu.spsr_svc)) != expected_state.SPSR[2]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_svc: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_svc)), expected_state.SPSR[2] });
+
+    if (@as(u32, @bitCast(cpu.spsr_abt)) != expected_state.SPSR[3]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_abt: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_abt)), expected_state.SPSR[3] });
+    if (@as(u32, @bitCast(cpu.spsr_irq)) != expected_state.SPSR[4]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_irq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_irq)), expected_state.SPSR[4] });
+    if (@as(u32, @bitCast(cpu.spsr_und)) != expected_state.SPSR[5]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_und: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_und)), expected_state.SPSR[5] });
 }
 
 const Test = struct {
@@ -87,8 +108,8 @@ const Test = struct {
         data: u32,
         cycle: u32,
     },
-    opcodes: []u16,
-    base_addr: u16,
+    opcodes: []u32,
+    base_addr: []u32,
 
     fn log(self: *const @This()) void {
         self.initial.log();
@@ -123,27 +144,45 @@ const TestState = struct {
 };
 
 fn read8(state: *TestState, addr: u32) u8 {
-    _ = state;
-    _ = addr;
+    for (state.test_data.transactions) |t| {
+        if (t.kind == .Read and t.addr == addr) {
+            return @truncate(t.data);
+        }
+    }
+    std.debug.print("Unexpected read at {X:>8}\n", .{addr});
     return 0;
 }
 
 fn read32(state: *TestState, addr: u32) u32 {
-    _ = state;
-    _ = addr;
+    for (state.test_data.transactions) |t| {
+        if (t.kind == .Read and t.addr == addr) {
+            return t.data;
+        }
+    }
+    std.debug.print("Unexpected read at {X:>8}\n", .{addr});
     return 0;
 }
 
 fn write8(state: *TestState, addr: u32, val: u8) void {
-    _ = state;
-    _ = addr;
-    _ = val;
+    for (state.test_data.transactions) |t| {
+        if (t.kind == .Write and t.addr == addr) {
+            if (t.data != val) {
+                std.debug.print(red(" Unexpected write at {X:>8}: {X:>2} != {X:>2}\n"), .{ addr, val, t.data });
+            }
+        }
+    }
+    std.debug.print(red(" Unexpected write at {X:>8} (={X:>2})\n"), .{ addr, val });
 }
 
 fn write32(state: *TestState, addr: u32, val: u32) void {
-    _ = state;
-    _ = addr;
-    _ = val;
+    for (state.test_data.transactions) |t| {
+        if (t.kind == .Write and t.addr == addr) {
+            if (t.data != val) {
+                std.debug.print(red(" Unexpected write at {X:>8}: {X:>8} != {X:>8}\n"), .{ addr, val, t.data });
+            }
+        }
+    }
+    std.debug.print(red(" Unexpected write at {X:>8} (={X:>8})\n"), .{ addr, val });
 }
 
 fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
@@ -170,23 +209,24 @@ fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
     }
 
     cpu.cpsr = @bitCast(t.initial.CPSR);
-    cpu.spsr_fiq = @bitCast(t.initial.SPCR);
-    cpu.spsr_svc = @bitCast(t.initial.SPCR);
-    cpu.spsr_abt = @bitCast(t.initial.SPCR);
-    cpu.spsr_irq = @bitCast(t.initial.SPCR);
-    cpu.spsr_und = @bitCast(t.initial.SPCR);
+    cpu.spsr_fiq = @bitCast(t.initial.SPSR[1]);
+    cpu.spsr_svc = @bitCast(t.initial.SPSR[2]);
+    cpu.spsr_abt = @bitCast(t.initial.SPSR[3]);
+    cpu.spsr_irq = @bitCast(t.initial.SPSR[4]);
+    cpu.spsr_und = @bitCast(t.initial.SPSR[5]);
+
+    cpu.instruction_pipeline[0] = t.initial.pipeline[1];
 
     if (log) {
         t.log();
     }
 
-    while (ts.cycle < 4) {
-        const opcode = t.opcodes[ts.cycle];
-
-        arm7.interpreter.execute(cpu, opcode);
-
-        ts.cycle += 1;
-    }
+    arm7.interpreter.execute(cpu, t.opcodes[0]);
+    ts.cpu.r[15] +%= 4;
+    arm7.interpreter.execute(cpu, t.opcodes[
+        if (ts.cpu.r[15] == t.initial.R[15] +% 4) 1 else 3
+    ]);
+    ts.cpu.r[15] +%= 4;
 
     try std.testing.expectEqualSlices(u32, t.final.R, &cpu.r);
     try std.testing.expectEqualSlices(u32, t.final.R_fiq[0..5], &cpu.r_fiq_8_12);
@@ -196,11 +236,15 @@ fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
     try std.testing.expectEqualSlices(u32, t.final.R_irq, &cpu.r_irq);
     try std.testing.expectEqualSlices(u32, t.final.R_und, &cpu.r_und);
     try std.testing.expectEqual(t.final.CPSR, @as(u32, @bitCast(cpu.cpsr)));
-    try std.testing.expectEqual(t.final.SPCR, @as(u32, @bitCast(cpu.spsr().*)));
+    try std.testing.expectEqual(t.final.SPSR[0], @as(u32, @bitCast(cpu.spsr_for(.FastInterrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[1], @as(u32, @bitCast(cpu.spsr_for(.Supervisor).*)));
+    try std.testing.expectEqual(t.final.SPSR[2], @as(u32, @bitCast(cpu.spsr_for(.Abort).*)));
+    try std.testing.expectEqual(t.final.SPSR[3], @as(u32, @bitCast(cpu.spsr_for(.Interrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[4], @as(u32, @bitCast(cpu.spsr_for(.Undefined).*)));
 }
 
 test {
-    const TestDir = "../ARM7TDMI/";
+    const TestDir = "../ARM7TDMI/v1";
     var test_dir = try std.fs.cwd().openDir(TestDir, .{ .iterate = true });
     defer test_dir.close();
 
@@ -233,8 +277,8 @@ test {
             file_num += 1;
 
             const fullpath = try std.fs.path.join(std.testing.allocator, &[_][]const u8{ TestDir, entry.basename });
-            std.debug.print(green("[{d: >3}/{d: >3}]") ++ " Opening {s}\n", .{ file_num, 233, entry.basename });
             defer std.testing.allocator.free(fullpath);
+            std.debug.print(green("[{d: >3}/{d: >3}]") ++ " Opening {s}\n", .{ file_num, 233, fullpath });
             const data = try std.fs.cwd().readFileAlloc(std.testing.allocator, fullpath, 512 * 1024 * 1024);
             defer std.testing.allocator.free(data);
 
