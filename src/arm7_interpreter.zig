@@ -212,9 +212,22 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 cpu.set_pc(cpu.read(u32, addr) & 0xFFFFFFFC);
             }
         } else {
-            // STM (1)
-            std.debug.print("Unimplemented STM with s=1\n", .{});
-            @panic("Unimplemented STM with s=1");
+            // STM with s=1 - User bank transfer
+            // User bank registers are transferred rather than the register bank.
+            // std.debug.assert(inst.w == 0);
+            inline for (0..16) |i| {
+                if (inst.reg(i)) {
+                    var val = if (i == 13 or i == 14 and cpu.cpsr.m != .User) cpu.banked_regs(cpu.cpsr.m)[i - 13] else cpu.r[i];
+                    if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
+
+                    // See Writeback above.
+                    const value = if (first_store and i == inst.rn) base else val;
+                    first_store = false;
+
+                    cpu.write(u32, addr, value);
+                    addr += 4;
+                }
+            }
         }
     }
 }
