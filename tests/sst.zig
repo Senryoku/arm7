@@ -87,7 +87,7 @@ fn compare_state(cpu: *const arm7.ARM7, expected_state: *const CPUState) void {
     std.debug.print("\n", .{});
 
     if (@as(u32, @bitCast(cpu.cpsr)) != expected_state.CPSR) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  CPSR: {X:0>8}  {X:0>8} ({any} / {any})\u{001b}[0m", .{ @as(u32, @bitCast(cpu.cpsr)), expected_state.CPSR, cpu.cpsr, @as(arm7.CPSR, @bitCast(expected_state.CPSR)) });
+    std.debug.print("  CPSR: {X:0>8}  {X:0>8}\n        ({any}\n        {any})\u{001b}[0m", .{ @as(u32, @bitCast(cpu.cpsr)), expected_state.CPSR, cpu.cpsr, @as(arm7.CPSR, @bitCast(expected_state.CPSR)) });
 
     std.debug.print("\n", .{});
 
