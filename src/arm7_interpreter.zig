@@ -18,6 +18,12 @@ pub fn tick(self: *arm7.ARM7) void {
     self.check_fiq();
 }
 
+pub fn is_valid(instr: u32) bool {
+    const tag = arm7.ARM7.get_instr_tag(instr);
+    const handler = InstructionHandlers[arm7.JumpTable[tag]];
+    return handler != handle_undefined and handler != handle_invalid;
+}
+
 pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32) void{
     handle_branch_and_exchange,
     handle_block_data_transfer,
@@ -273,22 +279,20 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataTransferInstruction = @bitCast(instruction);
     std.debug.assert(inst._tag == 0b01);
 
-    std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
+    std.debug.assert(builtin.is_test or inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
 
     var offset: u32 = inst.offset;
     if (inst.i == 1) { // Offset is a register
         const sro: ScaledRegisterOffset = @bitCast(inst.offset);
-        std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
-        std.debug.assert(sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
+        std.debug.assert(builtin.is_test or sro.rm != 15); // R15 must not be specified as the register offset (Rm).
+        std.debug.assert(builtin.is_test or sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
         offset = offset_from_register(cpu, inst.offset).shifter_operand;
     }
 
+    const signed_offset: u32 = if (inst.u == 1) offset else (~offset +% 1);
+
     const base = cpu.r[inst.rn];
-
-    // NOTE: I'm not certain that the wrapping behavior here is needed, or if something else is wrong.
-    const offset_addr = if (inst.u == 1) base +% offset else base -% offset;
-
-    const addr = if (inst.p == 1) offset_addr else base;
+    const addr: u32 = @bitCast(if (inst.p == 1) base +% signed_offset else base);
 
     // In the case of post-indexed addressing (p == 0), the write back bit is redundant and must be set to zero,
     // since the old base value can be retained by setting the offset to zero.
@@ -299,9 +303,6 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     if (inst.w == 1 and inst.p == 0) {
         // ?? Probably doesn't apply to our use case.
     }
-
-    // Post-indexed data transfers always write back the modified base.
-    if (inst.w == 1 or inst.p == 0) cpu.r[inst.rn] = offset_addr;
 
     if (inst.l == 0) {
         // Store to memory
@@ -316,7 +317,13 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             // the data bus is not affected if the address is not word aligned.
             cpu.write(u32, addr, val);
         }
+        // Post-indexed data transfers always write back the modified base.
+        if (inst.w == 1 or inst.p == 0)
+            cpu.r[inst.rn] +%= signed_offset;
     } else {
+        if (inst.w == 1 or inst.p == 0)
+            cpu.r[inst.rn] +%= signed_offset;
+
         // Load from memory
         if (inst.b == 1) {
             cpu.r[inst.rd] = cpu.read(u8, addr);

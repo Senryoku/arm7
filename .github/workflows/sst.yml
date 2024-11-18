@@ -13,14 +13,14 @@ jobs:
             - uses: actions/checkout@v4
               with:
                   repository: SingleStepTests/ARM7TDMI 
-                  path: tests_json
+                  path: ARM7TDMI
             - name: Move JSON test files to temp directory
-              run: mkdir /home/runner/dev && mv tests_json /home/runner/dev/tests_json/
+              run: mkdir /home/runner/dev && mv ARM7TDMI /home/runner/dev/ARM7TDMI/
             - name: Transcode JSON test files
-              working-directory: /home/runner/dev/tests_json/v1
+              working-directory: /home/runner/dev/ARM7TDMI/v1
               run: python ./transcode_json.py
             - name: Move JSON test files to final location
-              run: mv /home/runner/dev/tests_json/ ../tests_json/
+              run: mv /home/runner/dev/ARM7TDMI/ ../ARM7TDMI/
             - uses: actions/checkout@v4
               with:
                 submodules: 'true'
