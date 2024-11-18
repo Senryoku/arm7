@@ -251,10 +251,12 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
 }
 
 fn handle_software_interrupt(cpu: *arm7.ARM7, _: u32) void {
-    cpu.r_svc[1] = cpu.pc() - 4; // R14_svc = address of next instruction after the SWI instruction
+    const spc = cpu.pc() - 4;
+    cpu.spsr_svc = cpu.cpsr;
     cpu.change_mode(.Supervisor);
     cpu.cpsr.t = false; // Execute in ARM state (NOTE: We don't have a way to execute in THUMB state)
     cpu.cpsr.i = true; // Disable normal interrupts
+    cpu.r[14] = spc; // R14_svc = address of next instruction after the SWI instruction
 
     // FIXME: Something about high vectors? I guess the interrupt vector can be located at 0xFFFF0000 instead of 0x00000000 in some cases. we don't handle it.
     cpu.set_pc(0x00000008);
