@@ -124,6 +124,11 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     var first_store = true;
 
+    // The address should normally be a word aligned quantity and non-word aligned addresses do not affect the
+    // instruction. However, the bottom 2 bits of the address will appear on A[1:0] and might be interpreted by
+    // the memory system.
+    addr &= 0xFFFFFFFC;
+
     // LDM (1) / STM (1)
     if (inst.s == 0) {
         if (inst.l == 1) {
@@ -295,26 +300,14 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         else {
             // A word store (STR) should generate a word aligned address. The word presented to
             // the data bus is not affected if the address is not word aligned.
-            cpu.write(u32, addr & 0xFFFFFFFC, val);
+            cpu.write(u32, addr, val);
         }
     } else {
         // Load from memory
         if (inst.b == 1) {
             cpu.r[inst.rd] = cpu.read(u8, addr);
         } else {
-            // A word load (LDR) will normally use a word aligned address. However, an address
-            // offset from a word boundary will cause the data to be rotated into the register so that
-            // the addressed byte occupies bits 0 to 7. This means that half-words accessed at offsets
-            // 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15 of the
-            // register. Two shift operations are then required to clear or to sign extend the upper 16
-            // bits.
-
-            // Load word aligned address
-            var val = cpu.read(u32, addr & 0xFFFFFFC);
-            // Rotate it so the addressed byte occupies bits 0 to 7
-            val = std.math.rotr(u32, val, (addr & 3) * 8);
-
-            cpu.r[inst.rd] = val;
+            cpu.r[inst.rd] = cpu.read(u32, addr);
         }
         if (inst.rd == 15) cpu.reset_pipeline();
     }
