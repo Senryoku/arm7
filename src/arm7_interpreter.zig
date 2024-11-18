@@ -337,6 +337,10 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
 
+    std.debug.assert(builtin.is_test or inst.rd != 15);
+    std.debug.assert(builtin.is_test or inst.rn != 15);
+    std.debug.assert(builtin.is_test or inst.rs != 15);
+
     var addr = cpu.r[inst.rn];
     if (STR_STM_store_R15_plus_4 and inst.rn == 15) addr += 4;
     var reg = cpu.r[inst.rm];
@@ -352,7 +356,6 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
 
     // NOTE: I think this should be an illegal instruction, but we'll handle it
     //       for easier testing.
-    std.debug.assert(builtin.is_test or inst.rd != 15);
     if (inst.rd == 15) {
         cpu.reset_pipeline();
     }
