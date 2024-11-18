@@ -17,7 +17,7 @@ jobs:
             - name: Move JSON test files to temp directory
               run: mkdir /home/runner/dev && mv tests_json /home/runner/dev/tests_json/
             - name: Transcode JSON test files
-              working-directory: /home/runner/dev/tests_json/
+              working-directory: /home/runner/dev/tests_json/v1
               run: python ./transcode_json.py
             - name: Move JSON test files to final location
               run: mv /home/runner/dev/tests_json/ ../tests_json/
@@ -30,4 +30,4 @@ jobs:
             - uses: mlugg/setup-zig@v1
               with:
                 version: ${{ steps.zigversion.outputs.version }}
-            - run: zig build sh4_test --summary all
+            - run: zig build sst --summary all
