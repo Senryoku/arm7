@@ -644,16 +644,30 @@ pub const ARM7 = struct {
     }
 
     pub fn reset_pipeline(self: *@This()) void {
+        self.r[15] &= 0xFFFF_FFFE;
         self.instruction_pipeline[0] = self.fetch();
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
-        if (address & self.external_memory_address_mask != 0) switch (T) {
-            u8 => return self.on_external_read8.callback(self.on_external_read8.data.?, address),
-            u32 => return self.on_external_read32.callback(self.on_external_read32.data.?, address),
+        const aligned_addr = (if (T == u32) address & 0xFFFF_FFFC else address);
+
+        var r = if (address & self.external_memory_address_mask != 0) switch (T) {
+            u8 => self.on_external_read8.callback(self.on_external_read8.data.?, aligned_addr),
+            u32 => self.on_external_read32.callback(self.on_external_read32.data.?, aligned_addr),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
-        };
-        return @as(*const T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).*;
+        } else @as(*const T, @alignCast(@ptrCast(&self.memory[aligned_addr & self.memory_address_mask]))).*;
+
+        if (T == u32 and address != aligned_addr) {
+            // A word load (LDR) will normally use a word aligned address. However, an address
+            // offset from a word boundary will cause the data to be rotated into the register so that
+            // the addressed byte occupies bits 0 to 7. This means that half-words accessed at offsets
+            // 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15 of the
+            // register. Two shift operations are then required to clear or to sign extend the upper 16
+            // bits.
+            r = std.math.rotr(u32, r, 8 * (address & 3));
+        }
+
+        return r;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
