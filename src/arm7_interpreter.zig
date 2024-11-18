@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const arm7_interpreter_log = std.log.scoped(.arm7_interpreter);
 
 const arm7 = @import("arm7.zig");
@@ -316,32 +317,49 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != 15);
-
-    const addr = cpu.r[inst.rn];
-    const reg = cpu.r[inst.rm];
+    var addr = cpu.r[inst.rn];
+    if (STR_STM_store_R15_plus_4 and inst.rn == 15) addr += 4;
+    var reg = cpu.r[inst.rm];
     if (inst.b == 1) {
         cpu.r[inst.rd] = cpu.read(u8, addr);
+        if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
         cpu.write(u8, addr, @truncate(reg));
     } else {
         cpu.r[inst.rd] = cpu.read(u32, addr);
+        if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
         cpu.write(u32, addr, reg);
+    }
+
+    // NOTE: I think this should be an illegal instruction, but we'll handle it
+    //       for easier testing.
+    std.debug.assert(builtin.is_test or inst.rd != 15);
+    if (inst.rd == 15) {
+        cpu.reset_pipeline();
     }
 }
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MultiplyInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != inst.rm);
-    std.debug.assert(inst.rd != 15);
-    std.debug.assert(inst.rm != 15);
-    std.debug.assert(inst.rs != 15);
+    if (!builtin.is_test) {
+        std.debug.assert(inst.rd != inst.rm); // NOTE: Per the docs, this case should return 0 when A == 0
+        std.debug.assert(inst.rd != 15);
+        std.debug.assert(inst.rm != 15);
+        std.debug.assert(inst.rs != 15);
+    }
 
-    var result: u32 = cpu.r[inst.rm] *% cpu.r[inst.rs];
+    var op1 = cpu.r[inst.rm];
+    var op2 = cpu.r[inst.rs];
+    var op3 = cpu.r[inst.rn];
+    if (inst.rm == 15) op1 += 4;
+    if (inst.rs == 15) op2 += 4;
+    if (inst.rn == 15) op3 += 4;
+
+    var result: u32 = op1 *% op2;
 
     if (inst.a == 1) {
-        std.debug.assert(inst.rn != 15);
-        result +%= cpu.r[inst.rn];
+        std.debug.assert(builtin.is_test or inst.rn != 15);
+        result +%= op3;
     }
 
     cpu.r[inst.rd] = result;
@@ -350,6 +368,8 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
         cpu.cpsr.z = cpu.r[inst.rd] == 0;
     }
+
+    if (inst.rd == 15) cpu.reset_pipeline();
 }
 
 fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
