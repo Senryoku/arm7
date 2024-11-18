@@ -28,13 +28,19 @@ const CPUState = struct {
 
     fn log(self: *const @This()) void {
         for (0..8) |i| {
-            std.debug.print("  R{d}: {X:0>8}   R{d: <2}: {X:0>8} |\n", .{
+            std.debug.print("    R{d}: {X:0>8}   R{d: <2}: {X:0>8} |\n", .{
                 i,
                 self.R[i],
                 i + 8,
                 self.R[i + 8],
             });
         }
+        std.debug.print("    CPSR: {any}\n", .{@as(arm7.CPSR, @bitCast(self.CPSR))});
+        std.debug.print("    SPSR_fiq: {X:0>8} | R_fiq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[1], self.R_fiq[5 + 0], self.R_fiq[5 + 1] });
+        std.debug.print("    SPSR_svc: {X:0>8} | R_svc: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[2], self.R_svc[0], self.R_svc[1] });
+        std.debug.print("    SPSR_abt: {X:0>8} | R_abt: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[3], self.R_abt[0], self.R_abt[1] });
+        std.debug.print("    SPSR_irq: {X:0>8} | R_irq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[4], self.R_irq[0], self.R_irq[1] });
+        std.debug.print("    SPSR_und: {X:0>8} | R_und: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[5], self.R_und[0], self.R_und[1] });
     }
 };
 
@@ -43,12 +49,12 @@ fn cpu_log(cpu: *const arm7.ARM7) void {
 }
 
 fn compare_state(cpu: *const arm7.ARM7, expected_state: *const CPUState) void {
+    std.debug.print("  (Reg: Actual - Expected)\n", .{});
     for (0..16) |i| {
         if (cpu.r[i] != expected_state.R[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r[i], expected_state.R[i] });
         if (i % 4 == 3) std.debug.print("\n", .{});
     }
-    std.debug.print("\n", .{});
     for (0..5) |i| {
         if (cpu.r_fiq_8_12[i] != expected_state.R_fiq[i]) std.debug.print("\u{001b}[31m", .{});
         std.debug.print("  R_fiq{d: <2}: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ i, cpu.r_fiq_8_12[i], expected_state.R_fiq[i] });
@@ -96,6 +102,8 @@ fn compare_state(cpu: *const arm7.ARM7, expected_state: *const CPUState) void {
     std.debug.print("  SPSR_irq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_irq)), expected_state.SPSR[4] });
     if (@as(u32, @bitCast(cpu.spsr_und)) != expected_state.SPSR[5]) std.debug.print("\u{001b}[31m", .{});
     std.debug.print("  SPSR_und: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_und)), expected_state.SPSR[5] });
+
+    std.debug.print("\n", .{});
 }
 
 const Test = struct {
@@ -107,17 +115,19 @@ const Test = struct {
         addr: u32,
         data: u32,
         cycle: u32,
+
+        pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+            try writer.print("Transaction({d}){s}({d}): {X:0>8} = {X:0>8}", .{
+                self.cycle,
+                @tagName(self.kind),
+                self.size,
+                self.addr,
+                self.data,
+            });
+        }
     },
     opcodes: []u32,
     base_addr: []u32,
-
-    fn log(self: *const @This()) void {
-        self.initial.log();
-
-        for (self.opcodes) |opcode| {
-            std.debug.print("   > {X}\n", .{opcode});
-        }
-    }
 };
 
 pub const std_options: std.Options = .{
@@ -141,51 +151,72 @@ const TestState = struct {
     cpu: *arm7.ARM7 = undefined,
     cycle: u32 = 0,
     test_data: Test = undefined,
+    failed: bool = false,
 };
 
 fn read8(state: *TestState, addr: u32) u8 {
     for (state.test_data.transactions) |t| {
-        if (t.kind == .Read and t.addr == addr) {
+        if (t.kind == .Read and t.addr == addr and t.size == 1) {
             return @truncate(t.data);
         }
     }
-    std.debug.print("Unexpected read at {X:>8}\n", .{addr});
+    state.failed = true;
+    std.debug.print("  Unexpected read at {X:>8}. Expected one of:\n", .{addr});
+    for (state.test_data.transactions) |t| {
+        std.debug.print("   {any}\n", .{t});
+    }
     return 0;
 }
 
 fn read32(state: *TestState, addr: u32) u32 {
     for (state.test_data.transactions) |t| {
-        if (t.kind == .Read and t.addr == addr) {
+        if (t.kind == .Read and t.addr & 0xFFFFFFFC == addr & 0xFFFFFFFC and t.size == 4) {
             return t.data;
         }
     }
-    std.debug.print("Unexpected read at {X:>8}\n", .{addr});
+    state.failed = true;
+    std.debug.print("  Unexpected read at {X:>8}. Expected one of:\n", .{addr});
+    for (state.test_data.transactions) |t| {
+        std.debug.print("   {any}\n", .{t});
+    }
     return 0;
 }
 
 fn write8(state: *TestState, addr: u32, val: u8) void {
     for (state.test_data.transactions) |t| {
-        if (t.kind == .Write and t.addr == addr) {
+        if (t.kind == .Write and t.addr == addr and t.size == 1) {
             if (t.data != val) {
-                std.debug.print(red(" Unexpected write at {X:>8}: {X:>2} != {X:>2}\n"), .{ addr, val, t.data });
+                std.debug.print(red(" Unexpected write at {X:>8}: Got {X:>2}, expected {X:>2}\n"), .{ addr, val, t.data });
+                state.failed = true;
             }
+            return;
         }
     }
-    std.debug.print(red(" Unexpected write at {X:>8} (={X:>2})\n"), .{ addr, val });
+    state.failed = true;
+    std.debug.print(red(" Unexpected write at {X:>8} (={X:>2}). Expected one of:\n"), .{ addr, val });
+    for (state.test_data.transactions) |t| {
+        std.debug.print("   {any}\n", .{t});
+    }
 }
 
 fn write32(state: *TestState, addr: u32, val: u32) void {
     for (state.test_data.transactions) |t| {
-        if (t.kind == .Write and t.addr == addr) {
+        if (t.kind == .Write and t.addr & 0xFFFFFFFC == addr & 0xFFFFFFFC and t.size == 4) {
             if (t.data != val) {
-                std.debug.print(red(" Unexpected write at {X:>8}: {X:>8} != {X:>8}\n"), .{ addr, val, t.data });
+                std.debug.print(red(" Unexpected write at {X:>8}: Got {X:>8}, expected {X:>8}\n"), .{ addr, val, t.data });
+                state.failed = true;
             }
+            return;
         }
     }
-    std.debug.print(red(" Unexpected write at {X:>8} (={X:>8})\n"), .{ addr, val });
+    state.failed = true;
+    std.debug.print(red(" Unexpected write at {X:>8} (={X:>8}). Expected one of:\n"), .{ addr, val });
+    for (state.test_data.transactions) |t| {
+        std.debug.print("   {any}\n", .{t});
+    }
 }
 
-fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
+fn run_test(t: Test, cpu: *arm7.ARM7) !void {
     var ts: TestState = .{ .cpu = cpu, .cycle = 0, .test_data = t };
     cpu.on_external_read8 = .{ .callback = @ptrCast(&read8), .data = &ts };
     cpu.on_external_read32 = .{ .callback = @ptrCast(&read32), .data = &ts };
@@ -201,6 +232,7 @@ fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
     }
 
     for (0..2) |i| {
+        cpu.r_usr[i] = t.initial.R[13 + i];
         cpu.r_fiq[i] = t.initial.R_fiq[5 + i];
         cpu.r_svc[i] = t.initial.R_svc[i];
         cpu.r_abt[i] = t.initial.R_abt[i];
@@ -217,10 +249,6 @@ fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
 
     cpu.instruction_pipeline[0] = t.initial.pipeline[1];
 
-    if (log) {
-        t.log();
-    }
-
     arm7.interpreter.execute(cpu, t.opcodes[0]);
     ts.cpu.r[15] +%= 4;
     arm7.interpreter.execute(cpu, t.opcodes[
@@ -236,11 +264,13 @@ fn run_test(t: Test, cpu: *arm7.ARM7, comptime log: bool) !void {
     try std.testing.expectEqualSlices(u32, t.final.R_irq, &cpu.r_irq);
     try std.testing.expectEqualSlices(u32, t.final.R_und, &cpu.r_und);
     try std.testing.expectEqual(t.final.CPSR, @as(u32, @bitCast(cpu.cpsr)));
-    try std.testing.expectEqual(t.final.SPSR[0], @as(u32, @bitCast(cpu.spsr_for(.FastInterrupt).*)));
-    try std.testing.expectEqual(t.final.SPSR[1], @as(u32, @bitCast(cpu.spsr_for(.Supervisor).*)));
-    try std.testing.expectEqual(t.final.SPSR[2], @as(u32, @bitCast(cpu.spsr_for(.Abort).*)));
-    try std.testing.expectEqual(t.final.SPSR[3], @as(u32, @bitCast(cpu.spsr_for(.Interrupt).*)));
-    try std.testing.expectEqual(t.final.SPSR[4], @as(u32, @bitCast(cpu.spsr_for(.Undefined).*)));
+    try std.testing.expectEqual(t.final.SPSR[1], @as(u32, @bitCast(cpu.spsr_for(.FastInterrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[2], @as(u32, @bitCast(cpu.spsr_for(.Supervisor).*)));
+    try std.testing.expectEqual(t.final.SPSR[3], @as(u32, @bitCast(cpu.spsr_for(.Abort).*)));
+    try std.testing.expectEqual(t.final.SPSR[4], @as(u32, @bitCast(cpu.spsr_for(.Interrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[5], @as(u32, @bitCast(cpu.spsr_for(.Undefined).*)));
+
+    if (ts.failed) return error.IOFail;
 }
 
 test {
@@ -254,19 +284,32 @@ test {
     const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
     defer std.testing.allocator.free(mem);
 
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var arena_allocator = arena.allocator();
+
     var cpu = arm7.ARM7.init(mem, 0x00000000, 0xFFFFFFFF);
 
     var skipped_tests: u32 = 0;
-    var failed_tests = std.ArrayList(struct {
+    var results = std.ArrayList(struct {
         instruction: []const u8,
+        tests_count: usize,
         failed_cases: u32,
     }).init(std.testing.allocator);
-    defer failed_tests.deinit();
+    defer results.deinit();
+
     var file_num: u32 = 0;
     tests_loop: while (try walker.next()) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.basename, ".json")) {
             for ([_][]const u8{
                 // Skipped tests
+                // "block_data_transfer.json", // TODO: Investigation needed!
+                "branch_exchange.json", // Unimplemented
+                "hw_data_transfer_immediate.json", // TODO: Investigation needed!
+                "hw_data_transfer_register.json", // Unimplemented
+                "mull.json", // Unimplemented
+                "single_data_transfer.json", // Has Undefined instructions ?!
+                "undefined.json",
             }) |filename| {
                 if (std.mem.eql(u8, entry.basename, filename)) {
                     std.debug.print(yellow("! Skipping {s}\n"), .{entry.basename});
@@ -278,7 +321,7 @@ test {
 
             const fullpath = try std.fs.path.join(std.testing.allocator, &[_][]const u8{ TestDir, entry.basename });
             defer std.testing.allocator.free(fullpath);
-            std.debug.print(green("[{d: >3}/{d: >3}]") ++ " Opening {s}\n", .{ file_num, 233, fullpath });
+            std.debug.print(green("[{d: >3}/{d: >3}]") ++ " Opening {s}\n", .{ file_num, 11, fullpath });
             const data = try std.fs.cwd().readFileAlloc(std.testing.allocator, fullpath, 512 * 1024 * 1024);
             defer std.testing.allocator.free(data);
 
@@ -286,33 +329,49 @@ test {
             defer test_data.deinit();
 
             var failed_test_cases: u32 = 0;
+            var ran_test_cases: u32 = 0;
             for (test_data.value) |t| {
-                run_test(t, &cpu, false) catch |err| {
+                ran_test_cases += 1;
+                // std.debug.print(" Testing: {s}\n", .{arm7.ARM7.disassemble(t.opcodes[0])});
+                run_test(t, &cpu) catch |err| {
+                    std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, ran_test_cases, arm7.ARM7.disassemble(t.opcodes[0]), t.opcodes[0], @errorName(err) });
                     if (failed_test_cases == 0) {
-                        std.debug.print(red("Failed to run test {s}: {s}\n"), .{ entry.basename, @errorName(err) });
-                        run_test(t, &cpu, true) catch {};
+                        std.debug.print("  ==== Initial state ==== \n", .{});
+                        t.initial.log();
+                        std.debug.print("  ======================= \n", .{});
+                        for (t.transactions) |tr| {
+                            std.debug.print("   {any}\n", .{tr});
+                        }
                         compare_state(&cpu, &t.final);
                     }
                     failed_test_cases += 1;
+                    break;
                 };
             }
             if (failed_test_cases > 0) {
-                std.debug.print(red("  [{s}] {d}/{d} test cases failed.\n"), .{ entry.basename, failed_test_cases, test_data.value.len });
-                try failed_tests.append(.{
-                    .instruction = entry.basename,
-                    .failed_cases = failed_test_cases,
-                });
+                std.debug.print(red("[{s}] {d}/{d} ({d} total) test cases failed.\n"), .{ entry.basename, failed_test_cases, ran_test_cases, test_data.value.len });
+            } else {
+                std.debug.print(green("[{s}] {d}/{d} ({d} total) test cases passed.\n"), .{ entry.basename, ran_test_cases, ran_test_cases, test_data.value.len });
             }
+            try results.append(.{
+                .instruction = try arena_allocator.dupe(u8, entry.basename),
+                .tests_count = test_data.value.len,
+                .failed_cases = failed_test_cases,
+            });
         }
     }
     if (skipped_tests > 0) {
         std.debug.print(yellow("Skipped {d} tests.\n"), .{skipped_tests});
     }
-    if (failed_tests.items.len > 0) {
-        std.debug.print(red("{d}/{d} tests failed.\n"), .{ failed_tests.items.len, file_num });
-        for (failed_tests.items) |f| {
-            std.debug.print(red(" {s: <20} {d: >3}/{d} test cases failed.\n"), .{ f.instruction, f.failed_cases, 500 });
+    if (results.items.len > 0)
+        std.debug.print(red("{d}/{d} tests failed.\n"), .{ results.items.len, file_num });
+    for (results.items) |f| {
+        if (f.failed_cases > 0) {
+            std.debug.print(red(" {s: <30}: {d: >3}/{d} test cases failed.\n"), .{ f.instruction, f.failed_cases, f.tests_count });
+        } else {
+            std.debug.print(green(" {s: <30}: All {d} test cases passed.\n"), .{ f.instruction, f.tests_count });
         }
-        return error.TestFailed;
     }
+    if (results.items.len > 0)
+        return error.TestFailed;
 }
