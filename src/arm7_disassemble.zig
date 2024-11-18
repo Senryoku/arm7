@@ -136,7 +136,7 @@ fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
 fn disassemble_block_data_transfer(instruction: u32) []const u8 {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
     const cond = disassemble_condition(inst.cond);
-    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}, {s}", .{
+    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}, {s}{s}", .{
         if (inst.l == 0) "stm" else "ldm",
         cond,
         switch ((@as(u2, inst.u) << 1) | inst.p) {
@@ -148,6 +148,7 @@ fn disassemble_block_data_transfer(instruction: u32) []const u8 {
         disassemble_register(inst.rn),
         if (inst.w == 1) "!" else "",
         disassemble_reg_list(inst.reg_list),
+        if (inst.s == 1) "^" else "",
     }) catch unreachable;
 }
 
@@ -190,9 +191,17 @@ fn disassemble_single_data_transfer(instruction: u32) []const u8 {
 }
 
 fn disassemble_single_data_swap(instruction: u32) []const u8 {
-    _ = instruction;
+    const instr: arm7.SingleDataSwapInstruction = @bitCast(instruction);
 
-    return "SingleDataSwap";
+    const cond = disassemble_condition(instr.cond);
+
+    return std.fmt.bufPrint(&disassemble_temp, "swp{s}{s} {s},{s},[{s}]", .{
+        cond,
+        if (instr.b == 1) "b" else "",
+        disassemble_register(instr.rd),
+        disassemble_register(instr.rm),
+        disassemble_register(instr.rn),
+    }) catch unreachable;
 }
 
 fn disassemble_multiply(instruction: u32) []const u8 {
