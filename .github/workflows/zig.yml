@@ -14,15 +14,21 @@ jobs:
         runs-on: ${{matrix.os}}
         steps:
             - uses: actions/checkout@v4
-            - uses: goto-bus-stop/setup-zig@v2
+            - name: Get zig version
+              id: zigversion
+              run: echo "version=$(cat .zigversion)" >> $GITHUB_OUTPUT
+            - uses: mlugg/setup-zig@v1
               with:
-                version: 0.13.0-dev.351+64ef45eb0
+                version: ${{ steps.zigversion.outputs.version }}
             - run: zig build test --summary all
     lint:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - uses: goto-bus-stop/setup-zig@v2
+            - name: Get zig version
+              id: zigversion
+              run: echo "version=$(cat .zigversion)" >> $GITHUB_OUTPUT
+            - uses: mlugg/setup-zig@v1
               with:
-                version: 0.13.0-dev.351+64ef45eb0
+                version: ${{ steps.zigversion.outputs.version }}
             - run: zig fmt --check src/*.zig
