@@ -339,7 +339,7 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
 
     std.debug.assert(builtin.is_test or inst.rd != 15);
     std.debug.assert(builtin.is_test or inst.rn != 15);
-    std.debug.assert(builtin.is_test or inst.rs != 15);
+    std.debug.assert(builtin.is_test or inst.rm != 15);
 
     var addr = cpu.r[inst.rn];
     if (STR_STM_store_R15_plus_4 and inst.rn == 15) addr += 4;
