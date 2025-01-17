@@ -692,6 +692,7 @@ pub const ARM7 = struct {
         bytes += try writer.write(std.mem.asBytes(&self.spsr_abt));
         bytes += try writer.write(std.mem.asBytes(&self.spsr_und));
         bytes += try writer.write(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
+        bytes += try writer.write(std.mem.asBytes(&self.fiq_signaled));
         bytes += try writer.write(std.mem.asBytes(&self.running));
         return bytes;
     }
@@ -715,6 +716,7 @@ pub const ARM7 = struct {
         bytes += try reader.read(std.mem.asBytes(&self.spsr_abt));
         bytes += try reader.read(std.mem.asBytes(&self.spsr_und));
         bytes += try reader.read(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
+        bytes += try reader.read(std.mem.asBytes(&self.fiq_signaled));
         bytes += try reader.read(std.mem.asBytes(&self.running));
         return bytes;
     }
