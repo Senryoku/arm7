@@ -309,6 +309,7 @@ test {
     var cpu = arm7.ARM7.init(mem, 0x00000000, 0xFFFFFFFF);
 
     var skipped_tests: u32 = 0;
+    var failed_tests: u32 = 0;
     var results = std.ArrayList(struct {
         instruction: []const u8,
         tests_count: usize,
@@ -372,7 +373,10 @@ test {
                 }
                 run_test(t, &cpu) catch |err| {
                     std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, evaluated_test_cases, arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0], @errorName(err) });
-                    if (failed_test_cases == 0) {
+                    if (failed_test_cases == 0) failed_tests += 1;
+                    const BailOnFailure = false;
+                    const PrintAll = true;
+                    if (PrintAll or failed_test_cases == 0) {
                         std.debug.print("  ==== Initial state ==== \n", .{});
                         t.initial.log();
                         std.debug.print("  ======================= \n", .{});
@@ -382,7 +386,7 @@ test {
                         compare_state(&cpu, &t.final);
                     }
                     failed_test_cases += 1;
-                    // return error.Failure;
+                    if (BailOnFailure) return error.Failure;
                     // break;
                 };
             }
@@ -400,11 +404,12 @@ test {
             });
         }
     }
-    if (skipped_tests > 0) {
+
+    if (skipped_tests > 0)
         std.debug.print(yellow("Skipped {d} tests.\n"), .{skipped_tests});
-    }
-    if (results.items.len > 0)
-        std.debug.print(red("{d}/{d} tests failed.\n"), .{ results.items.len, file_num });
+    if (failed_tests > 0)
+        std.debug.print(red("{d}/{d} tests failed.\n"), .{ failed_tests, file_num });
+
     for (results.items) |f| {
         if (f.failed_cases > 0) {
             std.debug.print(red(" {s: <30}: {d: >3}/{d} test cases failed ({d} skipped).\n"), .{ f.instruction, f.failed_cases, f.evaluated_cases, f.skipped_cases });

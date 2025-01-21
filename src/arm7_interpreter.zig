@@ -682,9 +682,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ORR => {
             cpu.r[inst.rd] = op1 | op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -693,9 +691,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .MOV => {
             cpu.r[inst.rd] = op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -704,9 +700,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .BIC => {
             cpu.r[inst.rd] = op1 & ~op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -715,9 +709,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .MVN => {
             cpu.r[inst.rd] = ~op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -725,11 +717,15 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             }
         },
     }
+    if (inst.rd == 15) {
+        if (inst.s == 1)
+            cpu.restore_cpsr();
 
-    // If PC as been written to, flush pipeline and refill it.
-    switch (inst.opcode) {
-        .TST, .TEQ, .CMP, .CMN => {},
-        else => if (inst.rd == 15) cpu.reset_pipeline(),
+        // If PC as been written to, flush pipeline and refill it.
+        switch (inst.opcode) {
+            .TST, .TEQ, .CMP, .CMN => {},
+            else => cpu.reset_pipeline(),
+        }
     }
 }
 
