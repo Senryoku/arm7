@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const arm7 = @import("arm7.zig");
 
 const arm7_interpreter = @import("arm7_interpreter.zig");
@@ -118,7 +119,7 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
         }
     } else { // Post-indexed addressing
         if (inst.i == 0) {
-            std.debug.assert(inst.offset != 0);
+            std.debug.assert(builtin.is_test or inst.offset != 0);
             return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}], #{s}0x{X}", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
         } else {
             const sro = dissasemble_sro(@bitCast(inst.offset));

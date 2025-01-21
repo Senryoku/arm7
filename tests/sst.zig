@@ -25,6 +25,7 @@ const CPUState = struct {
     CPSR: u32,
     SPSR: []u32,
     pipeline: []u32,
+    access: u32,
 
     fn log(self: *const @This()) void {
         for (0..8) |i| {
@@ -36,11 +37,11 @@ const CPUState = struct {
             });
         }
         std.debug.print("    CPSR: {any}\n", .{@as(arm7.CPSR, @bitCast(self.CPSR))});
-        std.debug.print("    SPSR_fiq: {X:0>8} | R_fiq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[1], self.R_fiq[5 + 0], self.R_fiq[5 + 1] });
-        std.debug.print("    SPSR_svc: {X:0>8} | R_svc: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[2], self.R_svc[0], self.R_svc[1] });
-        std.debug.print("    SPSR_abt: {X:0>8} | R_abt: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[3], self.R_abt[0], self.R_abt[1] });
-        std.debug.print("    SPSR_irq: {X:0>8} | R_irq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[4], self.R_irq[0], self.R_irq[1] });
-        std.debug.print("    SPSR_und: {X:0>8} | R_und: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[5], self.R_und[0], self.R_und[1] });
+        std.debug.print("    SPSR_fiq: {X:0>8} | R_fiq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[0], self.R_fiq[5 + 0], self.R_fiq[5 + 1] });
+        std.debug.print("    SPSR_svc: {X:0>8} | R_svc: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[1], self.R_svc[0], self.R_svc[1] });
+        std.debug.print("    SPSR_abt: {X:0>8} | R_abt: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[2], self.R_abt[0], self.R_abt[1] });
+        std.debug.print("    SPSR_irq: {X:0>8} | R_irq: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[3], self.R_irq[0], self.R_irq[1] });
+        std.debug.print("    SPSR_und: {X:0>8} | R_und: [{X:0<8}, {X:0<8}]\n", .{ self.SPSR[4], self.R_und[0], self.R_und[1] });
     }
 };
 
@@ -91,17 +92,17 @@ fn compare_state(cpu: *const arm7.ARM7, expected_state: *const CPUState) void {
 
     std.debug.print("\n", .{});
 
-    if (@as(u32, @bitCast(cpu.spsr_fiq)) != expected_state.SPSR[1]) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR_fiq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_fiq)), expected_state.SPSR[1] });
-    if (@as(u32, @bitCast(cpu.spsr_svc)) != expected_state.SPSR[2]) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR_svc: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_svc)), expected_state.SPSR[2] });
+    if (@as(u32, @bitCast(cpu.spsr_fiq)) != expected_state.SPSR[0]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_fiq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_fiq)), expected_state.SPSR[0] });
+    if (@as(u32, @bitCast(cpu.spsr_svc)) != expected_state.SPSR[1]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_svc: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_svc)), expected_state.SPSR[1] });
 
-    if (@as(u32, @bitCast(cpu.spsr_abt)) != expected_state.SPSR[3]) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR_abt: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_abt)), expected_state.SPSR[3] });
-    if (@as(u32, @bitCast(cpu.spsr_irq)) != expected_state.SPSR[4]) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR_irq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_irq)), expected_state.SPSR[4] });
-    if (@as(u32, @bitCast(cpu.spsr_und)) != expected_state.SPSR[5]) std.debug.print("\u{001b}[31m", .{});
-    std.debug.print("  SPSR_und: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_und)), expected_state.SPSR[5] });
+    if (@as(u32, @bitCast(cpu.spsr_abt)) != expected_state.SPSR[2]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_abt: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_abt)), expected_state.SPSR[2] });
+    if (@as(u32, @bitCast(cpu.spsr_irq)) != expected_state.SPSR[3]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_irq: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_irq)), expected_state.SPSR[3] });
+    if (@as(u32, @bitCast(cpu.spsr_und)) != expected_state.SPSR[4]) std.debug.print("\u{001b}[31m", .{});
+    std.debug.print("  SPSR_und: {X:0>8}  {X:0>8}\u{001b}[0m  |", .{ @as(u32, @bitCast(cpu.spsr_und)), expected_state.SPSR[4] });
 
     std.debug.print("\n", .{});
 }
@@ -115,6 +116,7 @@ const Test = struct {
         addr: u32,
         data: u32,
         cycle: u32,
+        access: u32,
 
         pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
             try writer.print("Transaction({d}){s}({d}): {X:0>8} = {X:0>8}", .{
@@ -126,7 +128,7 @@ const Test = struct {
             });
         }
     },
-    opcodes: []u32,
+    opcode: u32,
     base_addr: []u32,
 };
 
@@ -168,6 +170,8 @@ fn read8(state: *TestState, addr: u32) u8 {
 }
 
 fn read32(state: *TestState, addr: u32) u32 {
+    if (addr == state.test_data.base_addr[0]) return state.test_data.opcode;
+
     for (state.test_data.transactions) |t| {
         if (t.kind == .Read and t.addr & 0xFFFFFFFC == addr & 0xFFFFFFFC and t.size == 4)
             return t.data;
@@ -226,6 +230,7 @@ fn run_test(t: Test, cpu: *arm7.ARM7) !void {
     cpu.on_external_write8 = .{ .callback = @ptrCast(&write8), .data = &ts };
     cpu.on_external_write32 = .{ .callback = @ptrCast(&write32), .data = &ts };
 
+    cpu.change_mode(.User);
     for (0..16) |i| {
         cpu.r[i] = t.initial.R[i];
     }
@@ -243,45 +248,39 @@ fn run_test(t: Test, cpu: *arm7.ARM7) !void {
         cpu.r_und[i] = t.initial.R_und[i];
     }
 
-    cpu.cpsr = @bitCast(t.initial.CPSR);
-    cpu.spsr_fiq = @bitCast(t.initial.SPSR[1]);
-    cpu.spsr_svc = @bitCast(t.initial.SPSR[2]);
-    cpu.spsr_abt = @bitCast(t.initial.SPSR[3]);
-    cpu.spsr_irq = @bitCast(t.initial.SPSR[4]);
-    cpu.spsr_und = @bitCast(t.initial.SPSR[5]);
+    cpu.spsr_fiq = @bitCast(t.initial.SPSR[0]);
+    cpu.spsr_svc = @bitCast(t.initial.SPSR[1]);
+    cpu.spsr_abt = @bitCast(t.initial.SPSR[2]);
+    cpu.spsr_irq = @bitCast(t.initial.SPSR[3]);
+    cpu.spsr_und = @bitCast(t.initial.SPSR[4]);
 
-    std.debug.assert(t.opcodes[0] == t.initial.pipeline[0]);
+    cpu.set_cpsr(@bitCast(t.initial.CPSR));
 
-    cpu.instruction_pipeline[0] = t.initial.pipeline[1];
+    cpu.instruction_pipeline[0] = t.initial.pipeline[0];
 
-    arm7.interpreter.execute(cpu, t.opcodes[0]);
-    ts.cpu.r[15] +%= 4;
-    ts.cpu.r[15] &= 0xFFFF_FFFE;
-    arm7.interpreter.execute(cpu, cpu.instruction_pipeline[0]);
-    ts.cpu.r[15] +%= 4;
-    ts.cpu.r[15] &= 0xFFFF_FFFE;
-
-    try std.testing.expectEqualSlices(u32, t.final.R, &cpu.r);
-    try std.testing.expectEqualSlices(u32, t.final.R_fiq[0..5], &cpu.r_fiq_8_12);
-
-    // FIXME: We won't update those internally unless the mode is changed
-    if (cpu.cpsr.m != .FastInterrupt)
-        try std.testing.expectEqualSlices(u32, t.final.R_fiq[5..], &cpu.r_fiq);
-    if (cpu.cpsr.m != .Supervisor)
-        try std.testing.expectEqualSlices(u32, t.final.R_svc, &cpu.r_svc);
-    if (cpu.cpsr.m != .Abort)
-        try std.testing.expectEqualSlices(u32, t.final.R_abt, &cpu.r_abt);
-    if (cpu.cpsr.m != .Interrupt)
-        try std.testing.expectEqualSlices(u32, t.final.R_irq, &cpu.r_irq);
-    if (cpu.cpsr.m != .Undefined)
-        try std.testing.expectEqualSlices(u32, t.final.R_und, &cpu.r_und);
+    arm7.interpreter.execute(cpu, t.initial.pipeline[0]);
+    cpu.r[15] +%= 4;
 
     try std.testing.expectEqual(t.final.CPSR, @as(u32, @bitCast(cpu.cpsr)));
-    try std.testing.expectEqual(t.final.SPSR[1], @as(u32, @bitCast(cpu.spsr_for(.FastInterrupt).*)));
-    try std.testing.expectEqual(t.final.SPSR[2], @as(u32, @bitCast(cpu.spsr_for(.Supervisor).*)));
-    try std.testing.expectEqual(t.final.SPSR[3], @as(u32, @bitCast(cpu.spsr_for(.Abort).*)));
-    try std.testing.expectEqual(t.final.SPSR[4], @as(u32, @bitCast(cpu.spsr_for(.Interrupt).*)));
-    try std.testing.expectEqual(t.final.SPSR[5], @as(u32, @bitCast(cpu.spsr_for(.Undefined).*)));
+
+    const cpsr_backup = cpu.cpsr;
+    cpu.change_mode(.User); // Simplifies checking the results
+    defer cpu.cpsr = cpsr_backup;
+
+    try std.testing.expectEqualSlices(u32, t.final.R, &cpu.r);
+
+    try std.testing.expectEqualSlices(u32, t.final.R_fiq[0..5], &cpu.r_fiq_8_12);
+    try std.testing.expectEqualSlices(u32, t.final.R_fiq[5..], &cpu.r_fiq);
+    try std.testing.expectEqualSlices(u32, t.final.R_svc, &cpu.r_svc);
+    try std.testing.expectEqualSlices(u32, t.final.R_abt, &cpu.r_abt);
+    try std.testing.expectEqualSlices(u32, t.final.R_irq, &cpu.r_irq);
+    try std.testing.expectEqualSlices(u32, t.final.R_und, &cpu.r_und);
+
+    try std.testing.expectEqual(t.final.SPSR[0], @as(u32, @bitCast(cpu.spsr_for(.FastInterrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[1], @as(u32, @bitCast(cpu.spsr_for(.Supervisor).*)));
+    try std.testing.expectEqual(t.final.SPSR[2], @as(u32, @bitCast(cpu.spsr_for(.Abort).*)));
+    try std.testing.expectEqual(t.final.SPSR[3], @as(u32, @bitCast(cpu.spsr_for(.Interrupt).*)));
+    try std.testing.expectEqual(t.final.SPSR[4], @as(u32, @bitCast(cpu.spsr_for(.Undefined).*)));
 
     if (ts.failed) return error.IOFail;
 }
@@ -307,6 +306,7 @@ test {
     var results = std.ArrayList(struct {
         instruction: []const u8,
         tests_count: usize,
+        evaluated_cases: u32 = 0,
         skipped_cases: u32 = 0,
         failed_cases: u32 = 0,
     }).init(std.testing.allocator);
@@ -314,14 +314,20 @@ test {
 
     var file_num: u32 = 0;
     tests_loop: while (try walker.next()) |entry| {
-        if (entry.kind == .file and std.mem.endsWith(u8, entry.basename, ".json")) {
+        if (entry.kind == .file and std.mem.startsWith(u8, entry.basename, "arm_") and std.mem.endsWith(u8, entry.basename, ".json")) {
             for ([_][]const u8{
                 // Skipped tests
-                "branch_exchange.json", // Unimplemented
-                "hw_data_transfer_immediate.json", // Unimplemented
-                "hw_data_transfer_register.json", // Unimplemented
-                "mull.json", // Unimplemented
-                "undefined.json",
+                "arm_bx.json", // Unimplemented
+                "arm_cdp.json", // Unimplemented
+                "arm_ldrh_strh.json", // Unimplemented
+                "arm_ldrsb_ldrsh.json", // Unimplemented
+                "arm_mull_mlal.json", // Unimplemented
+                "arm_mcr_mrc.json", // Unimplemented
+                "arm_mrs.json", // Attempt to access SPSR of User/System mode
+                "arm_msr_imm.json", // Attempt to access SPSR of User/System mode
+                "arm_msr_reg.json", // std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
+                "arm_stc_ldc.json", // Unimplemented CoprocessorDataTransfer (?!)
+                "arm_undefined.json",
             }) |filename| {
                 if (std.mem.eql(u8, entry.basename, filename)) {
                     std.debug.print(yellow("! Skipping {s}\n"), .{entry.basename});
@@ -342,10 +348,10 @@ test {
 
             var failed_test_cases: u32 = 0;
             var skipped_test_cases: u32 = 0;
-            var ran_test_cases: u32 = 0;
+            var evaluated_test_cases: u32 = 0;
             for (test_data.value) |t| {
-                ran_test_cases += 1;
-                // std.debug.print(" Testing: {s}\n", .{arm7.ARM7.disassemble(t.opcodes[0])});
+                evaluated_test_cases += 1;
+                // std.debug.print(" Testing: {s} ({X:0>8})\n", .{ arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0] });
                 // FIXME: Test cases going out of FastInterrupt mode doesn't seem to work correctly?
                 if ((std.mem.eql(u8, entry.basename, "swi.json") or std.mem.eql(u8, entry.basename, "block_data_transfer.json")) and @as(arm7.CPSR, @bitCast(t.initial.CPSR)).m == .FastInterrupt) {
                     if (t.final.R[8] == 0) {
@@ -353,13 +359,13 @@ test {
                         continue;
                     }
                 }
-                if (!arm7.interpreter.is_valid(t.opcodes[0])) {
-                    // std.debug.print(yellow("! Skipping {s} ({X:0>8})\n"), .{ arm7.ARM7.disassemble(t.opcodes[0]), t.opcodes[0] });
+                if (!arm7.interpreter.is_valid(t.opcode)) {
+                    // std.debug.print(yellow("! Skipping {s} ({X:0>8})\n"), .{ arm7.ARM7.disassemble(t.opcode), t.opcode });
                     skipped_test_cases += 1;
                     continue;
                 }
                 run_test(t, &cpu) catch |err| {
-                    std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, ran_test_cases, arm7.ARM7.disassemble(t.opcodes[0]), t.opcodes[0], @errorName(err) });
+                    std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, evaluated_test_cases, arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0], @errorName(err) });
                     if (true or failed_test_cases == 0) {
                         std.debug.print("  ==== Initial state ==== \n", .{});
                         t.initial.log();
@@ -370,17 +376,19 @@ test {
                         compare_state(&cpu, &t.final);
                     }
                     failed_test_cases += 1;
-                    // break;
+                    // return error.Failure;
+                    break;
                 };
             }
             if (failed_test_cases > 0) {
-                std.debug.print(red("[{s}] {d}/{d} ({d} total) test cases failed.\n"), .{ entry.basename, failed_test_cases, ran_test_cases, test_data.value.len });
+                std.debug.print(red("[{s}] {d}/{d} ({d} total) test cases failed.\n"), .{ entry.basename, failed_test_cases, evaluated_test_cases, test_data.value.len });
             } else {
-                std.debug.print(green("[{s}] {d}/{d} ({d} total) test cases passed.\n"), .{ entry.basename, ran_test_cases, ran_test_cases, test_data.value.len });
+                std.debug.print(green("[{s}] {d}/{d} ({d} total) test cases passed.\n"), .{ entry.basename, evaluated_test_cases, evaluated_test_cases, test_data.value.len });
             }
             try results.append(.{
                 .instruction = try arena_allocator.dupe(u8, entry.basename),
                 .tests_count = test_data.value.len,
+                .evaluated_cases = evaluated_test_cases,
                 .failed_cases = failed_test_cases,
                 .skipped_cases = skipped_test_cases,
             });
@@ -393,11 +401,11 @@ test {
         std.debug.print(red("{d}/{d} tests failed.\n"), .{ results.items.len, file_num });
     for (results.items) |f| {
         if (f.failed_cases > 0) {
-            std.debug.print(red(" {s: <30}: {d: >3}/{d} test cases failed ({d} skipped).\n"), .{ f.instruction, f.failed_cases, f.tests_count, f.skipped_cases });
+            std.debug.print(red(" {s: <30}: {d: >3}/{d} test cases failed ({d} skipped).\n"), .{ f.instruction, f.failed_cases, f.evaluated_cases, f.skipped_cases });
         } else if (f.skipped_cases > 0) {
-            std.debug.print(yellow(" {s: <30}: {d: >3}/{d} test cases skipped.\n"), .{ f.instruction, f.skipped_cases, f.tests_count });
+            std.debug.print(yellow(" {s: <30}: {d: >3}/{d} test cases skipped.\n"), .{ f.instruction, f.skipped_cases, f.evaluated_cases });
         } else {
-            std.debug.print(green(" {s: <30}: All {d} test cases passed.\n"), .{ f.instruction, f.tests_count });
+            std.debug.print(green(" {s: <30}: All {d} test cases passed.\n"), .{ f.instruction, f.evaluated_cases });
         }
     }
     if (results.items.len > 0)

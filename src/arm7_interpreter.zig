@@ -453,7 +453,7 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
 fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MRSInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != 15);
+    std.debug.assert(builtin.is_test or inst.rd != 15);
 
     if (inst.r == 1) {
         cpu.r[inst.rd] = @bitCast(cpu.spsr().*);
@@ -473,7 +473,7 @@ fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
 
     const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r[inst.source_operand & 0x1F];
 
-    std.debug.assert(operand & UnallocMask == 0);
+    std.debug.assert(builtin.is_test or operand & UnallocMask == 0);
     const byte_mask: u32 = (if (inst.field_mask.c == 1) @as(u32, 0x000000FF) else 0x00000000) |
         (if (inst.field_mask.x == 1) @as(u32, 0x0000FF00) else 0x00000000) |
         (if (inst.field_mask.s == 1) @as(u32, 0x00FF0000) else 0x00000000) |

@@ -648,7 +648,7 @@ pub const ARM7 = struct {
     }
 
     pub fn reset_pipeline(self: *@This()) void {
-        self.r[15] &= 0xFFFF_FFFE;
+        // self.r[15] &= 0xFFFF_FFFE;
         self.instruction_pipeline[0] = self.fetch();
     }
 
