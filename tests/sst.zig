@@ -119,7 +119,7 @@ const Test = struct {
         access: u32,
 
         pub fn format(self: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-            try writer.print("Transaction({d}){s}({d}): {X:0>8} = {X:0>8}", .{
+            try writer.print("Transaction({d}) {s}({d}): {X:0>8} = {X:0>8}", .{
                 self.cycle,
                 @tagName(self.kind),
                 self.size,
@@ -291,31 +291,92 @@ fn run_test(t: Test, cpu: *arm7.ARM7) !void {
     if (ts.failed) return error.IOFail;
 }
 
-test {
-    const TestDir = "../ARM7TDMI/v1";
+fn test_file(filepath: []const u8) !struct {
+    tests_count: usize,
+    evaluated_cases: usize,
+    failed_cases: usize,
+    skipped_cases: usize,
+} {
+    const BailOnFailure = false;
+    const PrintAll = true;
+    const basename = std.fs.path.basename(filepath);
+
+    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    defer std.testing.allocator.free(mem);
+
+    var cpu = arm7.ARM7.init(mem, 0x00000000, 0xFFFFFFFF);
+
+    const data = try std.fs.cwd().readFileAlloc(std.testing.allocator, filepath, 512 * 1024 * 1024);
+    defer std.testing.allocator.free(data);
+
+    const test_data = try std.json.parseFromSlice([]Test, std.testing.allocator, data, .{});
+    defer test_data.deinit();
+
+    var failed_test_cases: usize = 0;
+    var skipped_test_cases: usize = 0;
+    var evaluated_test_cases: usize = 0;
+    for (test_data.value) |t| {
+        evaluated_test_cases += 1;
+        // std.debug.print(" Testing: {s} ({X:0>8})\n", .{ arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0] });
+
+        if (!arm7.interpreter.is_valid(t.opcode)) {
+            // std.debug.print(yellow("! Skipping {s} ({X:0>8})\n"), .{ arm7.ARM7.disassemble(t.opcode), t.opcode });
+            skipped_test_cases += 1;
+            continue;
+        }
+
+        run_test(t, &cpu) catch |err| {
+            std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ basename, evaluated_test_cases, arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0], @errorName(err) });
+            if (PrintAll or failed_test_cases == 0) {
+                std.debug.print("  ==== Initial state ==== \n", .{});
+                t.initial.log();
+                std.debug.print("  ======================= \n", .{});
+                for (t.transactions) |tr| {
+                    std.debug.print("   {any}\n", .{tr});
+                }
+                compare_state(&cpu, &t.final);
+            }
+            failed_test_cases += 1;
+            if (BailOnFailure) return error.Failure;
+            // break;
+        };
+    }
+    if (failed_test_cases > 0) {
+        std.debug.print(red("[{s}] {d}/{d} ({d} total) test cases failed.\n"), .{ basename, failed_test_cases, evaluated_test_cases, test_data.value.len });
+    } else {
+        std.debug.print(green("[{s}] {d}/{d} ({d} total) test cases passed.\n"), .{ basename, evaluated_test_cases, evaluated_test_cases, test_data.value.len });
+    }
+    return .{
+        .tests_count = test_data.value.len,
+        .evaluated_cases = evaluated_test_cases,
+        .failed_cases = failed_test_cases,
+        .skipped_cases = skipped_test_cases,
+    };
+}
+
+const TestDir = "../ARM7TDMI/v1/";
+
+test "All Files" {
+    if (true) return error.SkipZigTest;
+
     var test_dir = try std.fs.cwd().openDir(TestDir, .{ .iterate = true });
     defer test_dir.close();
 
     var walker = try test_dir.walk(std.testing.allocator);
     defer walker.deinit();
 
-    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
-    defer std.testing.allocator.free(mem);
-
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var arena_allocator = arena.allocator();
 
-    var cpu = arm7.ARM7.init(mem, 0x00000000, 0xFFFFFFFF);
-
-    var skipped_tests: u32 = 0;
-    var failed_tests: u32 = 0;
+    var skipped_tests: usize = 0;
+    var failed_tests: usize = 0;
     var results = std.ArrayList(struct {
         instruction: []const u8,
         tests_count: usize,
-        evaluated_cases: u32 = 0,
-        skipped_cases: u32 = 0,
-        failed_cases: u32 = 0,
+        evaluated_cases: usize = 0,
+        skipped_cases: usize = 0,
+        failed_cases: usize = 0,
     }).init(std.testing.allocator);
     defer results.deinit();
 
@@ -346,61 +407,18 @@ test {
 
             const fullpath = try std.fs.path.join(std.testing.allocator, &[_][]const u8{ TestDir, entry.basename });
             defer std.testing.allocator.free(fullpath);
+
             std.debug.print(green("[{d: >3}/{d: >3}]") ++ " Opening {s}\n", .{ file_num, 11, fullpath });
-            const data = try std.fs.cwd().readFileAlloc(std.testing.allocator, fullpath, 512 * 1024 * 1024);
-            defer std.testing.allocator.free(data);
 
-            const test_data = try std.json.parseFromSlice([]Test, std.testing.allocator, data, .{});
-            defer test_data.deinit();
+            const r = try test_file(fullpath);
+            if (r.failed_cases > 0) failed_tests += 1;
 
-            var failed_test_cases: u32 = 0;
-            var skipped_test_cases: u32 = 0;
-            var evaluated_test_cases: u32 = 0;
-            for (test_data.value) |t| {
-                evaluated_test_cases += 1;
-                // std.debug.print(" Testing: {s} ({X:0>8})\n", .{ arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0] });
-                // FIXME: Test cases going out of FastInterrupt mode doesn't seem to work correctly?
-                if ((std.mem.eql(u8, entry.basename, "swi.json") or std.mem.eql(u8, entry.basename, "block_data_transfer.json")) and @as(arm7.CPSR, @bitCast(t.initial.CPSR)).m == .FastInterrupt) {
-                    if (t.final.R[8] == 0) {
-                        skipped_test_cases += 1;
-                        continue;
-                    }
-                }
-                if (!arm7.interpreter.is_valid(t.opcode)) {
-                    // std.debug.print(yellow("! Skipping {s} ({X:0>8})\n"), .{ arm7.ARM7.disassemble(t.opcode), t.opcode });
-                    skipped_test_cases += 1;
-                    continue;
-                }
-                run_test(t, &cpu) catch |err| {
-                    std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, evaluated_test_cases, arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0], @errorName(err) });
-                    if (failed_test_cases == 0) failed_tests += 1;
-                    const BailOnFailure = false;
-                    const PrintAll = true;
-                    if (PrintAll or failed_test_cases == 0) {
-                        std.debug.print("  ==== Initial state ==== \n", .{});
-                        t.initial.log();
-                        std.debug.print("  ======================= \n", .{});
-                        for (t.transactions) |tr| {
-                            std.debug.print("   {any}\n", .{tr});
-                        }
-                        compare_state(&cpu, &t.final);
-                    }
-                    failed_test_cases += 1;
-                    if (BailOnFailure) return error.Failure;
-                    // break;
-                };
-            }
-            if (failed_test_cases > 0) {
-                std.debug.print(red("[{s}] {d}/{d} ({d} total) test cases failed.\n"), .{ entry.basename, failed_test_cases, evaluated_test_cases, test_data.value.len });
-            } else {
-                std.debug.print(green("[{s}] {d}/{d} ({d} total) test cases passed.\n"), .{ entry.basename, evaluated_test_cases, evaluated_test_cases, test_data.value.len });
-            }
             try results.append(.{
                 .instruction = try arena_allocator.dupe(u8, entry.basename),
-                .tests_count = test_data.value.len,
-                .evaluated_cases = evaluated_test_cases,
-                .failed_cases = failed_test_cases,
-                .skipped_cases = skipped_test_cases,
+                .tests_count = r.tests_count,
+                .evaluated_cases = r.evaluated_cases,
+                .failed_cases = r.failed_cases,
+                .skipped_cases = r.skipped_cases,
             });
         }
     }
@@ -421,4 +439,54 @@ test {
     }
     if (results.items.len > 0)
         return error.TestFailed;
+}
+
+test "arm_b_bl" {
+    const r = try test_file(TestDir ++ "arm_b_bl.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_data_proc_immediate" {
+    const r = try test_file(TestDir ++ "arm_data_proc_immediate.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_data_proc_immediate_shift" {
+    const r = try test_file(TestDir ++ "arm_data_proc_immediate_shift.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_data_proc_register_shift" {
+    const r = try test_file(TestDir ++ "arm_data_proc_register_shift.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_ldm_stm" {
+    const r = try test_file(TestDir ++ "arm_ldm_stm.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_ldr_str_immediate_offset" {
+    const r = try test_file(TestDir ++ "arm_ldr_str_immediate_offset.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_ldr_str_register_offset" {
+    const r = try test_file(TestDir ++ "arm_ldr_str_register_offset.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_mul_mla" {
+    const r = try test_file(TestDir ++ "arm_mul_mla.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_swi" {
+    const r = try test_file(TestDir ++ "arm_swi.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_swp" {
+    const r = try test_file(TestDir ++ "arm_swp.json");
+    if (r.failed_cases > 0) return error.TestFailed;
 }
