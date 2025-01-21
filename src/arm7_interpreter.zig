@@ -561,7 +561,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
     else
         operand_2_immediate(cpu, inst.operand2);
 
-    var op2 = shifter_result.shifter_operand;
+    const op2 = shifter_result.shifter_operand;
 
     // TODO: Yes, this can and must be refactored.
     switch (inst.opcode) {
@@ -612,8 +612,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ADC => {
             const carry: u32 = if (cpu.cpsr.c) 1 else 0;
-            op2 +%= carry;
-            cpu.r[inst.rd] = op1 +% op2;
+            cpu.r[inst.rd] = op1 +% op2 +% carry;
             if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
