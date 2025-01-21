@@ -547,7 +547,14 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
 
     // TODO: See "Writing to R15"
 
-    const op1 = cpu.r[inst.rn];
+    var op1 = cpu.r[inst.rn];
+
+    // The PC value will be the address of the instruction, plus 8 or 12 bytes due to instruction
+    // prefetching. If the shift amount is specified in the instruction, the PC will be 8 bytes
+    // ahead. If a register is used to specify the shift amount the PC will be 12 bytes ahead.
+    const sro: ScaledRegisterOffset = @bitCast(inst.operand2);
+    if (inst.rn == 15 and inst.i == 0 and sro.register_specified == 1)
+        op1 += 4;
 
     const shifter_result = if (inst.i == 0)
         offset_from_register(cpu, inst.operand2)
