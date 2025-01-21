@@ -560,9 +560,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
     switch (inst.opcode) {
         .AND => {
             cpu.r[inst.rd] = op1 & op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -571,9 +569,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .EOR => {
             cpu.r[inst.rd] = op1 ^ op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -582,9 +578,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .SUB => {
             cpu.r[inst.rd] = op1 -% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from(op1, op2);
@@ -593,9 +587,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .RSB => {
             cpu.r[inst.rd] = op2 -% op1;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from(op2, op1);
@@ -604,9 +596,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ADD => {
             cpu.r[inst.rd] = op1 +% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = carry_from(op1, op2);
@@ -617,9 +607,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             const carry: u32 = if (cpu.cpsr.c) 1 else 0;
             op2 +%= carry;
             cpu.r[inst.rd] = op1 +% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = carry_from_addc(op1, op2, carry);
@@ -629,9 +617,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         .SBC => {
             const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r[inst.rd] = op1 -% op2 -% carry;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from_subc(op1, op2, carry);
@@ -641,9 +627,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         .RSC => {
             const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r[inst.rd] = op2 -% op1 -% carry;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from_subc(op2, op1, carry);
