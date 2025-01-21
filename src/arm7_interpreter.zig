@@ -213,7 +213,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                     }
                 }
                 cpu.restore_cpsr();
-                cpu.set_pc(cpu.read(u32, addr) & 0xFFFFFFFC);
+                cpu.set_pc(cpu.read(u32, addr));
             }
         } else {
             // STM with s=1 - User bank transfer
