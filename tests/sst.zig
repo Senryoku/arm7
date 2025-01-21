@@ -261,6 +261,12 @@ fn run_test(t: Test, cpu: *arm7.ARM7) !void {
     arm7.interpreter.execute(cpu, t.initial.pipeline[0]);
     cpu.r[15] +%= 4;
 
+    // mul - Here the C flag should be set to a "meaningless value" per the doc.
+    //       But NBA is very accurate and emulate its full behaviour. I don't want to do that.
+    //       See https://bmchtech.github.io/post/multiply/
+    if (arm7.JumpTable[arm7.ARM7.get_instr_tag(t.initial.pipeline[0])] == 7)
+        cpu.cpsr.c = ((t.final.CPSR >> 29) & 1) == 1;
+
     try std.testing.expectEqual(t.final.CPSR, @as(u32, @bitCast(cpu.cpsr)));
 
     const cpsr_backup = cpu.cpsr;
