@@ -332,7 +332,7 @@ test {
                 "arm_mrs.json", // Attempt to access SPSR of User/System mode
                 "arm_msr_imm.json", // Attempt to access SPSR of User/System mode
                 "arm_msr_reg.json", // std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
-                "arm_stc_ldc.json", // Unimplemented CoprocessorDataTransfer (?!)
+                "arm_stc_ldc.json", // Unimplemented CoprocessorDataTransfer
                 "arm_undefined.json",
             }) |filename| {
                 if (std.mem.eql(u8, entry.basename, filename)) {
@@ -372,7 +372,7 @@ test {
                 }
                 run_test(t, &cpu) catch |err| {
                     std.debug.print(red("[{s}] Test #{d} '{s}' ({X:0>8}) failed: {s}\n"), .{ entry.basename, evaluated_test_cases, arm7.ARM7.disassemble(t.initial.pipeline[0]), t.initial.pipeline[0], @errorName(err) });
-                    if (true or failed_test_cases == 0) {
+                    if (failed_test_cases == 0) {
                         std.debug.print("  ==== Initial state ==== \n", .{});
                         t.initial.log();
                         std.debug.print("  ======================= \n", .{});
@@ -383,7 +383,7 @@ test {
                     }
                     failed_test_cases += 1;
                     // return error.Failure;
-                    break;
+                    // break;
                 };
             }
             if (failed_test_cases > 0) {

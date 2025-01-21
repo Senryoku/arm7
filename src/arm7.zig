@@ -639,7 +639,7 @@ pub const ARM7 = struct {
     }
 
     pub fn fetch(self: *@This()) u32 {
-        const instr = if (@import("builtin").is_test)
+        const instr = if (@import("builtin").is_test and self.on_external_read32.data != null)
             self.read(u32, self.pc() & 0xFFFF_FFFC)
         else
             @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
@@ -655,7 +655,7 @@ pub const ARM7 = struct {
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
         const aligned_addr = (if (T == u32) address & 0xFFFF_FFFC else address);
 
-        var r = if (@import("builtin").is_test or address & self.external_memory_address_mask != 0) switch (T) {
+        var r = if ((@import("builtin").is_test and self.on_external_write32.data != null) or address & self.external_memory_address_mask != 0) switch (T) {
             u8 => self.on_external_read8.callback(self.on_external_read8.data.?, aligned_addr),
             u32 => self.on_external_read32.callback(self.on_external_read32.data.?, aligned_addr),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
@@ -675,7 +675,7 @@ pub const ARM7 = struct {
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
-        if (@import("builtin").is_test or address & self.external_memory_address_mask != 0) switch (T) {
+        if ((@import("builtin").is_test and self.on_external_write32.data != null) or address & self.external_memory_address_mask != 0) switch (T) {
             u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, address, value),
             u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, address, value),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
