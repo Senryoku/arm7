@@ -298,7 +298,7 @@ fn test_file(filepath: []const u8) !struct {
     skipped_cases: usize,
 } {
     const BailOnFailure = false;
-    const PrintAll = true;
+    const PrintAll = false;
     const basename = std.fs.path.basename(filepath);
 
     const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
@@ -391,9 +391,6 @@ test "All Files" {
                 "arm_ldrsb_ldrsh.json", // Unimplemented
                 "arm_mull_mlal.json", // Unimplemented
                 "arm_mcr_mrc.json", // Unimplemented
-                "arm_mrs.json", // Attempt to access SPSR of User/System mode
-                "arm_msr_imm.json", // Attempt to access SPSR of User/System mode
-                "arm_msr_reg.json", // std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
                 "arm_stc_ldc.json", // Unimplemented CoprocessorDataTransfer
                 "arm_undefined.json",
             }) |filename| {
@@ -482,14 +479,17 @@ test "arm_mul_mla" {
 }
 
 test "arm_mrs" {
-    if (true) return error.SkipZigTest;
     const r = try test_file(TestDir ++ "arm_mrs.json");
     if (r.failed_cases > 0) return error.TestFailed;
 }
 
 test "arm_msr_imm" {
-    if (true) return error.SkipZigTest;
     const r = try test_file(TestDir ++ "arm_msr_imm.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_msr_reg" {
+    const r = try test_file(TestDir ++ "arm_msr_reg.json");
     if (r.failed_cases > 0) return error.TestFailed;
 }
 

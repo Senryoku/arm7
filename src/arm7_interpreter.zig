@@ -325,21 +325,18 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     var addr = cpu.r[inst.rn];
     if (STR_STM_store_R15_plus_4 and inst.rn == 15) addr += 4;
     var reg = cpu.r[inst.rm];
+    if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
     if (inst.b == 1) {
         cpu.r[inst.rd] = cpu.read(u8, addr);
-        if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
         cpu.write(u8, addr, @truncate(reg));
     } else {
         cpu.r[inst.rd] = cpu.read(u32, addr);
-        if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
         cpu.write(u32, addr, reg);
     }
 
-    // NOTE: I think this should be an illegal instruction, but we'll handle it
-    //       for easier testing.
-    if (inst.rd == 15) {
+    // NOTE: I think this should be an illegal instruction, but we'll handle it for easier testing.
+    if (inst.rd == 15)
         cpu.reset_pipeline();
-    }
 }
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
@@ -447,24 +444,18 @@ fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MSRInstruction = @bitCast(instruction);
 
-    const UnallocMask: u32 = 0x06F0FC00;
-    const UserMask: u32 = 0xF80F0200;
-    const PrivMask: u32 = 0x000001DF;
-    const StateMask: u32 = 0x01000020;
+    const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r[inst.source_operand & 0xF];
 
-    const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r[inst.source_operand & 0x1F];
+    var mask: u32 = 0;
+    if (inst.field_mask.c == 1) mask |= 0x000000FF;
+    if (inst.field_mask.x == 1) mask |= 0x0000FF00;
+    if (inst.field_mask.s == 1) mask |= 0x00FF0000;
+    if (inst.field_mask.f == 1) mask |= 0xFF000000;
 
-    std.debug.assert(builtin.is_test or operand & UnallocMask == 0);
-    const byte_mask: u32 = (if (inst.field_mask.c == 1) @as(u32, 0x000000FF) else 0x00000000) |
-        (if (inst.field_mask.x == 1) @as(u32, 0x0000FF00) else 0x00000000) |
-        (if (inst.field_mask.s == 1) @as(u32, 0x00FF0000) else 0x00000000) |
-        (if (inst.field_mask.f == 1) @as(u32, 0xFF000000) else 0x00000000);
     if (inst.r == 0) {
-        std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
-        const mask = byte_mask & if (cpu.in_a_privileged_mode()) (UserMask | PrivMask) else UserMask;
+        if (!cpu.in_a_privileged_mode()) mask &= 0xFF000000;
         cpu.set_cpsr(@bitCast((@as(u32, @bitCast(cpu.cpsr)) & ~mask) | (operand & mask)));
     } else {
-        const mask = byte_mask & (UserMask | PrivMask | StateMask);
         cpu.spsr().* = @bitCast((@as(u32, @bitCast(cpu.spsr().*)) & ~mask) | (operand & mask));
     }
 }

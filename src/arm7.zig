@@ -1,5 +1,5 @@
 const std = @import("std");
-const testing = std.testing;
+const builtin = @import("builtin");
 
 pub const interpreter = @import("arm7_interpreter.zig");
 pub const dissasemble = @import("arm7_disassemble.zig");
@@ -617,7 +617,7 @@ pub const ARM7 = struct {
 
     pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
         return switch (mode) {
-            .User, .System => @panic("Attempt to access SPSR of User/System mode"),
+            .User, .System => if (builtin.is_test) &self.cpsr else @panic("Attempt to access SPSR of User/System mode"),
             .FastInterrupt => &self.spsr_fiq,
             .Interrupt => &self.spsr_irq,
             .Supervisor => &self.spsr_svc,
