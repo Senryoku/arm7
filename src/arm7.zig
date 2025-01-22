@@ -675,12 +675,13 @@ pub const ARM7 = struct {
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
-        if ((@import("builtin").is_test and self.on_external_write32.data != null) or address & self.external_memory_address_mask != 0) switch (T) {
-            u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, address, value),
-            u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, address, value),
+        const aligned = (if (T == u32) address & 0xFFFF_FFFC else address);
+        if ((@import("builtin").is_test and self.on_external_write32.data != null) or aligned & self.external_memory_address_mask != 0) switch (T) {
+            u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, aligned, value),
+            u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, aligned, value),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
         };
-        @as(*T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).* = value;
+        @as(*T, @alignCast(@ptrCast(&self.memory[aligned & self.memory_address_mask]))).* = value;
     }
 
     pub inline fn in_a_privileged_mode(self: *const @This()) bool {

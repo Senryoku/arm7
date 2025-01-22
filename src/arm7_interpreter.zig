@@ -172,36 +172,14 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         if (inst.l == 1) {
             if (!inst.reg(15)) {
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
-                if (cpu.cpsr.m == .FastInterrupt) {
-                    inline for (0..8) |i| {
-                        if (inst.reg(i)) {
-                            cpu.r[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
+                const mode = cpu.cpsr.m;
+                cpu.change_mode(.User);
+                defer cpu.change_mode(mode);
+                inline for (0..15) |i| {
+                    if (inst.reg(i)) {
+                        cpu.r[i] = cpu.read(u32, addr);
+                        addr += 4;
                     }
-                    inline for (0..5) |i| {
-                        if (inst.reg(8 + i)) {
-                            cpu.r_fiq_8_12[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
-                    }
-                } else {
-                    inline for (0..13) |i| {
-                        if (inst.reg(i)) {
-                            cpu.r[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
-                    }
-                }
-                if (inst.reg(13)) {
-                    cpu.banked_regs(cpu.cpsr.m)[0] = cpu.read(u32, addr);
-                    if (cpu.cpsr.m == .User or cpu.cpsr.m == .System) cpu.r[13] = cpu.banked_regs(.User)[0];
-                    addr += 4;
-                }
-                if (inst.reg(14)) {
-                    cpu.banked_regs(cpu.cpsr.m)[1] = cpu.read(u32, addr);
-                    if (cpu.cpsr.m == .User or cpu.cpsr.m == .System) cpu.r[14] = cpu.banked_regs(.User)[1];
-                    addr += 4;
                 }
             } else {
                 // LDM (3) - Loads a subset, or possibly all, of the general-purpose registers and the PC from sequential memory
@@ -218,10 +196,12 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         } else {
             // STM with s=1 - User bank transfer
             // User bank registers are transferred rather than the register bank.
-            // std.debug.assert(inst.w == 0);
+            const mode = cpu.cpsr.m;
+            cpu.change_mode(.User);
+            defer cpu.change_mode(mode);
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
-                    var val = if (i == 13 or i == 14 and cpu.cpsr.m != .User) cpu.banked_regs(cpu.cpsr.m)[i - 13] else cpu.r[i];
+                    var val = cpu.r[i];
                     if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
 
                     // See Writeback above.
@@ -283,10 +263,11 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     var offset: u32 = inst.offset;
     if (inst.i == 1) { // Offset is a register
-        const sro: ScaledRegisterOffset = @bitCast(inst.offset);
+        var sro: ScaledRegisterOffset = @bitCast(inst.offset);
         std.debug.assert(builtin.is_test or sro.rm != 15); // R15 must not be specified as the register offset (Rm).
         std.debug.assert(builtin.is_test or sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
-        offset = offset_from_register(cpu, inst.offset).shifter_operand;
+        if (sro.register_specified == 1) sro.register_specified = 0;
+        offset = offset_from_register(cpu, @bitCast(sro)).shifter_operand;
     }
 
     const signed_offset: u32 = if (inst.u == 1) offset else (~offset +% 1);

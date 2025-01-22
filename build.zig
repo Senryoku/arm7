@@ -56,8 +56,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_asm_tests.step);
     //test_step.dependOn(&run_armwrestler_dc_tests.step);
 
-    const sst = b.addTest(.{ .root_source_file = b.path("tests/sst.zig"), .target = target, .optimize = optimize });
-    sst.root_module.addImport("arm7", arm7_module);
+    const sst = b.addTest(.{ .root_source_file = b.path("src/arm7_tests.zig"), .target = target, .optimize = optimize });
     const run_sst = b.addRunArtifact(sst);
     const sst_step = b.step("sst", "Run Single Step Tests");
     sst_step.dependOn(&run_sst.step);

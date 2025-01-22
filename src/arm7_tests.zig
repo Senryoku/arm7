@@ -1,7 +1,7 @@
 // https://github.com/SingleStepTests/ARM7TDMI
 
 const std = @import("std");
-const arm7 = @import("arm7");
+const arm7 = @import("arm7.zig");
 
 pub fn green(comptime str: []const u8) []const u8 {
     return "\u{001b}[32m" ++ str ++ "\u{001b}[0m";
@@ -478,6 +478,18 @@ test "arm_ldr_str_register_offset" {
 
 test "arm_mul_mla" {
     const r = try test_file(TestDir ++ "arm_mul_mla.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_mrs" {
+    if (true) return error.SkipZigTest;
+    const r = try test_file(TestDir ++ "arm_mrs.json");
+    if (r.failed_cases > 0) return error.TestFailed;
+}
+
+test "arm_msr_imm" {
+    if (true) return error.SkipZigTest;
+    const r = try test_file(TestDir ++ "arm_msr_imm.json");
     if (r.failed_cases > 0) return error.TestFailed;
 }
 
