@@ -122,14 +122,22 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // Pre indexing
     if (inst.p == 1) addr +%= stride;
 
+    const mode = cpu.cpsr.m;
+    const change_mode = inst.s == 1 and (inst.l == 0 or !inst.reg(15));
+    if (change_mode)
+        cpu.change_mode(.User);
+    defer if (change_mode) cpu.change_mode(mode);
+
     // Writeback
     // NOTE: A load including rn in the register list will always overwrite this.
     //       However, a store will store the unchanged value if it is the first register
     //       in the list, and the updated value otherwise.
-    if (inst.w == 1)
+    if (inst.w == 1) {
         cpu.r[inst.rn] +%= stride *% @popCount(inst.reg_list);
+        if (STR_STM_store_R15_plus_4 and inst.rn == 15) cpu.r[inst.rn] += 4;
+    }
 
-    var first_store = true;
+    var first_store = inst.w == 1;
 
     // The address should normally be a word aligned quantity and non-word aligned addresses do not affect the
     // instruction. However, the bottom 2 bits of the address will appear on A[1:0] and might be interpreted by
@@ -156,12 +164,10 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             // Store STM(1)
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
-                    var val = cpu.r[i];
-                    if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
-
                     // See Writeback above.
-                    const value = if (first_store and i == inst.rn) base else val;
+                    var value = if (first_store and i == inst.rn) base else cpu.r[i];
                     first_store = false;
+                    if (STR_STM_store_R15_plus_4 and i == 15) value += 4;
 
                     cpu.write(u32, addr, value);
                     addr += 4;
@@ -172,9 +178,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         if (inst.l == 1) {
             if (!inst.reg(15)) {
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
-                const mode = cpu.cpsr.m;
-                cpu.change_mode(.User);
-                defer cpu.change_mode(mode);
                 inline for (0..15) |i| {
                     if (inst.reg(i)) {
                         cpu.r[i] = cpu.read(u32, addr);
@@ -196,17 +199,12 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         } else {
             // STM with s=1 - User bank transfer
             // User bank registers are transferred rather than the register bank.
-            const mode = cpu.cpsr.m;
-            cpu.change_mode(.User);
-            defer cpu.change_mode(mode);
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
-                    var val = cpu.r[i];
-                    if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
-
                     // See Writeback above.
-                    const value = if (first_store and i == inst.rn) base else val;
+                    var value = if (first_store and i == inst.rn) base else cpu.r[i];
                     first_store = false;
+                    if (STR_STM_store_R15_plus_4 and i == 15) value += 4;
 
                     cpu.write(u32, addr, value);
                     addr += 4;
