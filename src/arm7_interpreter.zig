@@ -106,6 +106,8 @@ fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
 
+    std.debug.assert(builtin.is_test or inst.rn != 15); // "R15 shall not be used as the base register in any LDM or STM instruction."
+
     const base = cpu.r[inst.rn];
 
     var addr = base;
@@ -114,7 +116,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     // The lowest-numbered register is stored at the lowest memory address and
     // the highest-numbered register at the highest memory address.
-
     // For simplicity we'll always loop through registers in ascending order,
     // adjust the address to the base of the range when decrementing.
     if (inst.u == 0) addr +%= stride *% (@popCount(inst.reg_list) - 1);
@@ -122,10 +123,10 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // Pre indexing
     if (inst.p == 1) addr +%= stride;
 
+    // Change mode for the version that accesses user registers from priviliged modes.
     const mode = cpu.cpsr.m;
-    const change_mode = inst.s == 1 and (inst.l == 0 or !inst.reg(15));
-    if (change_mode)
-        cpu.change_mode(.User);
+    const change_mode = mode != .User and inst.s == 1 and (inst.l == 0 or !inst.reg(15));
+    if (change_mode) cpu.change_mode(.User);
     defer if (change_mode) cpu.change_mode(mode);
 
     // Writeback
@@ -133,11 +134,10 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     //       However, a store will store the unchanged value if it is the first register
     //       in the list, and the updated value otherwise.
     if (inst.w == 1) {
-        cpu.r[inst.rn] +%= stride *% @popCount(inst.reg_list);
+        cpu.r[inst.rn] = base +% stride *% @popCount(inst.reg_list);
         if (STR_STM_store_R15_plus_4 and inst.rn == 15) cpu.r[inst.rn] += 4;
     }
-
-    var first_store = inst.w == 1;
+    var first_store = inst.w == 1; // Ignored if no writeback.
 
     // The address should normally be a word aligned quantity and non-word aligned addresses do not affect the
     // instruction. However, the bottom 2 bits of the address will appear on A[1:0] and might be interpreted by
@@ -177,6 +177,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     } else {
         if (inst.l == 1) {
             if (!inst.reg(15)) {
+                std.debug.assert(change_mode or mode == .User);
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
                 inline for (0..15) |i| {
                     if (inst.reg(i)) {
@@ -197,6 +198,7 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                 cpu.set_pc(cpu.read(u32, addr));
             }
         } else {
+            std.debug.assert(change_mode or mode == .User);
             // STM with s=1 - User bank transfer
             // User bank registers are transferred rather than the register bank.
             inline for (0..16) |i| {
