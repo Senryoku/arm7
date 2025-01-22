@@ -616,8 +616,12 @@ pub const ARM7 = struct {
     }
 
     pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
+        const static = if (builtin.is_test) struct {
+            var test_dump: CPSR = undefined;
+        } else void;
+
         return switch (mode) {
-            .User, .System => if (builtin.is_test) &self.cpsr else @panic("Attempt to access SPSR of User/System mode"),
+            .User, .System => if (builtin.is_test) &static.test_dump else @panic("Attempt to access SPSR of User/System mode"),
             .FastInterrupt => &self.spsr_fiq,
             .Interrupt => &self.spsr_irq,
             .Supervisor => &self.spsr_svc,
