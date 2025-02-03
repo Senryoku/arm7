@@ -1,5 +1,5 @@
 const std = @import("std");
-const testing = std.testing;
+const builtin = @import("builtin");
 
 pub const interpreter = @import("arm7_interpreter.zig");
 pub const dissasemble = @import("arm7_disassemble.zig");
@@ -439,7 +439,7 @@ const Exception = enum {
 pub const ARM7 = struct {
     memory: []u8,
 
-    memory_address_mask: u32, // Bits used for internal memory addressing (should mask anything outisde of memory.len)
+    memory_address_mask: u32, // Bits used for internal memory addressing (should mask anything outside of memory.len)
     external_memory_address_mask: u32, // Bit(s) used to signal external memory access. If (addr & external_memory_address_mask) != 0, we'll use the external callbacks.
 
     cpsr: CPSR = .{},
@@ -489,7 +489,27 @@ pub const ARM7 = struct {
         };
     }
 
-    pub fn reset(self: *@This(), enable: bool) void {
+    pub fn reset(self: *@This()) void {
+        self.cpsr = .{};
+        self.r = [_]u32{0} ** 16;
+        self.r_fiq_8_12 = [_]u32{0} ** 5;
+        self.r_usr = [_]u32{0} ** 2;
+        self.r_fiq = [_]u32{0} ** 2;
+        self.r_svc = [_]u32{0} ** 2;
+        self.r_irq = [_]u32{0} ** 2;
+        self.r_abt = [_]u32{0} ** 2;
+        self.r_und = [_]u32{0} ** 2;
+        self.spsr_irq = .{};
+        self.spsr_svc = .{};
+        self.spsr_fiq = .{};
+        self.spsr_abt = .{};
+        self.spsr_und = .{};
+        self.instruction_pipeline = [_]u32{0} ** 1;
+        self.fiq_signaled = false;
+        self.running = false;
+    }
+
+    pub fn signal_reset(self: *@This(), enable: bool) void {
         // When the nRESET signal goes LOW a reset occurs, and the ARM7TDMI core
         // abandons the executing instruction and continues to increment the address bus as if still
         // fetching word or halfword instructions. nMREQ and SEQ indicates internal cycles
@@ -522,7 +542,8 @@ pub const ARM7 = struct {
     }
 
     pub fn restore_cpsr(self: *@This()) void {
-        self.set_cpsr(self.spsr().*);
+        if (self.cpsr.m != .User and self.cpsr.m != .System)
+            self.set_cpsr(self.spsr().*);
     }
 
     pub fn banked_regs(self: *@This(), mode: RegisterMode) []u32 {
@@ -615,8 +636,12 @@ pub const ARM7 = struct {
     }
 
     pub inline fn spsr_for(self: *@This(), mode: RegisterMode) *CPSR {
+        const static = if (builtin.is_test) struct {
+            var test_dump: CPSR = undefined;
+        } else void;
+
         return switch (mode) {
-            .User, .System => @panic("Attempt to access SPSR of User/System mode"),
+            .User, .System => if (builtin.is_test) &static.test_dump else @panic("Attempt to access SPSR of User/System mode"),
             .FastInterrupt => &self.spsr_fiq,
             .Interrupt => &self.spsr_irq,
             .Supervisor => &self.spsr_svc,
@@ -638,31 +663,49 @@ pub const ARM7 = struct {
     }
 
     pub fn fetch(self: *@This()) u32 {
-        const instr = @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
+        const instr = if (@import("builtin").is_test and self.on_external_read32.data != null)
+            self.read(u32, self.pc() & 0xFFFF_FFFC)
+        else
+            @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
         self.r[15] +%= 4;
         return instr;
     }
 
     pub fn reset_pipeline(self: *@This()) void {
+        // self.r[15] &= 0xFFFF_FFFE;
         self.instruction_pipeline[0] = self.fetch();
     }
 
     pub fn read(self: *const @This(), comptime T: type, address: u32) T {
-        if (address & self.external_memory_address_mask != 0) switch (T) {
-            u8 => return self.on_external_read8.callback(self.on_external_read8.data.?, address),
-            u32 => return self.on_external_read32.callback(self.on_external_read32.data.?, address),
+        const aligned_addr = (if (T == u32) address & 0xFFFF_FFFC else address);
+
+        var r = if ((@import("builtin").is_test and self.on_external_write32.data != null) or address & self.external_memory_address_mask != 0) switch (T) {
+            u8 => self.on_external_read8.callback(self.on_external_read8.data.?, aligned_addr),
+            u32 => self.on_external_read32.callback(self.on_external_read32.data.?, aligned_addr),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
-        };
-        return @as(*const T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).*;
+        } else @as(*const T, @alignCast(@ptrCast(&self.memory[aligned_addr & self.memory_address_mask]))).*;
+
+        if (T == u32 and address != aligned_addr) {
+            // A word load (LDR) will normally use a word aligned address. However, an address
+            // offset from a word boundary will cause the data to be rotated into the register so that
+            // the addressed byte occupies bits 0 to 7. This means that half-words accessed at offsets
+            // 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15 of the
+            // register. Two shift operations are then required to clear or to sign extend the upper 16
+            // bits.
+            r = std.math.rotr(u32, r, 8 * (address & 3));
+        }
+
+        return r;
     }
 
     pub fn write(self: *@This(), comptime T: type, address: u32, value: T) void {
-        if (address & self.external_memory_address_mask != 0) switch (T) {
-            u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, address, value),
-            u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, address, value),
+        const aligned = (if (T == u32) address & 0xFFFF_FFFC else address);
+        if ((@import("builtin").is_test and self.on_external_write32.data != null) or aligned & self.external_memory_address_mask != 0) switch (T) {
+            u8 => return self.on_external_write8.callback(self.on_external_write8.data.?, aligned, value),
+            u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, aligned, value),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
         };
-        @as(*T, @alignCast(@ptrCast(&self.memory[address & self.memory_address_mask]))).* = value;
+        @as(*T, @alignCast(@ptrCast(&self.memory[aligned & self.memory_address_mask]))).* = value;
     }
 
     pub inline fn in_a_privileged_mode(self: *const @This()) bool {

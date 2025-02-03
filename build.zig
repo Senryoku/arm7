@@ -55,6 +55,11 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_asm_tests.step);
     //test_step.dependOn(&run_armwrestler_dc_tests.step);
+
+    const sst = b.addTest(.{ .root_source_file = b.path("src/arm7_tests.zig"), .target = target, .optimize = optimize });
+    const run_sst = b.addRunArtifact(sst);
+    const sst_step = b.step("sst", "Run Single Step Tests");
+    sst_step.dependOn(&run_sst.step);
 }
 
 fn add_test(b: *std.Build, comptime name: []const u8, comptime entry: []const u8, arm7_lib: *std.Build.Step, arm7_module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Run {
