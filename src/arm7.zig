@@ -489,7 +489,27 @@ pub const ARM7 = struct {
         };
     }
 
-    pub fn reset(self: *@This(), enable: bool) void {
+    pub fn reset(self: *@This()) void {
+        self.cpsr = .{};
+        self.r = [_]u32{0} ** 16;
+        self.r_fiq_8_12 = [_]u32{0} ** 5;
+        self.r_usr = [_]u32{0} ** 2;
+        self.r_fiq = [_]u32{0} ** 2;
+        self.r_svc = [_]u32{0} ** 2;
+        self.r_irq = [_]u32{0} ** 2;
+        self.r_abt = [_]u32{0} ** 2;
+        self.r_und = [_]u32{0} ** 2;
+        self.spsr_irq = .{};
+        self.spsr_svc = .{};
+        self.spsr_fiq = .{};
+        self.spsr_abt = .{};
+        self.spsr_und = .{};
+        self.instruction_pipeline = [_]u32{0} ** 1;
+        self.fiq_signaled = false;
+        self.running = false;
+    }
+
+    pub fn signal_reset(self: *@This(), enable: bool) void {
         // When the nRESET signal goes LOW a reset occurs, and the ARM7TDMI core
         // abandons the executing instruction and continues to increment the address bus as if still
         // fetching word or halfword instructions. nMREQ and SEQ indicates internal cycles
