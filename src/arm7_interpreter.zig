@@ -460,7 +460,7 @@ fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
     }
 }
 
-inline fn n_flag(v: u32) bool {
+pub inline fn n_flag(v: u32) bool {
     return (v & 0x80000000) != 0;
 }
 
@@ -468,24 +468,24 @@ inline fn n_flag(v: u32) bool {
 // generates an overflow if both operands have the same sign (bit[31]), and the sign of the result is different to
 // the sign of both operands. Subtraction causes an overflow if the operands have different signs, and the first
 // operand and the result have different signs.
-inline fn overflow_from_add(op1: u32, op2: u32) bool {
+pub inline fn overflow_from_add(op1: u32, op2: u32) bool {
     const r: u32 = @bitCast(@as(i32, @bitCast(op1)) +% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 == op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
 }
 
-inline fn overflow_from_addc(op1: u32, op2: u32, carry: u32) bool {
+pub inline fn overflow_from_addc(op1: u32, op2: u32, carry: u32) bool {
     const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
     const r0 = @addWithOverflow(op[0], op[1]);
     const r1 = @addWithOverflow(r0[0], op[2]);
     return r0[1] == 1 or r1[1] == 1;
 }
 
-inline fn overflow_from_sub(op1: u32, op2: u32) bool {
+pub inline fn overflow_from_sub(op1: u32, op2: u32) bool {
     const r: u32 = @bitCast(@as(i32, @bitCast(op1)) -% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 != op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
 }
 
-inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
+pub inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
     const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
     const r0 = @subWithOverflow(op[0], op[1]);
     const r1 = @subWithOverflow(r0[0], op[2]);
@@ -495,22 +495,22 @@ inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
 // Returns 1 if the addition specified as its parameter caused a carry (true result is bigger than 2^32−1, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about an addition which occurred earlier in the pseudo-code. The addition is not repeated.
-fn carry_from(op1: u32, op2: u32) bool {
+pub inline fn carry_from(op1: u32, op2: u32) bool {
     return @as(u64, op1) + @as(u64, op2) > 0xFFFFFFFF;
 }
 
-fn carry_from_addc(op1: u64, op2: u64, c: u64) bool {
+pub inline fn carry_from_addc(op1: u64, op2: u64, c: u64) bool {
     return op1 + op2 + c > 0xFFFFFFFF;
 }
 
 // Returns 1 if the subtraction specified as its parameter caused a borrow (the true result is less than 0, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about a subtraction which occurred earlier in the pseudo-code. The subtraction is not repeated.
-fn borrow_from(op1: u32, op2: u32) bool {
+pub inline fn borrow_from(op1: u32, op2: u32) bool {
     return op2 > op1;
 }
 
-fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
+pub inline fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
     return op1 < @as(u64, op2) + c;
 }
 
