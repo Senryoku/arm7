@@ -129,7 +129,7 @@ const Test = struct {
         }
     },
     opcode: u32,
-    base_addr: []u32,
+    base_addr: u32,
 };
 
 pub const std_options: std.Options = .{
@@ -170,7 +170,7 @@ fn read8(state: *TestState, addr: u32) u8 {
 }
 
 fn read32(state: *TestState, addr: u32) u32 {
-    if (addr == state.test_data.base_addr[0]) return state.test_data.opcode;
+    if (addr == state.test_data.base_addr) return state.test_data.opcode;
 
     for (state.test_data.transactions) |t| {
         if (t.kind == .Read and t.addr & 0xFFFFFFFC == addr & 0xFFFFFFFC and t.size == 4)
