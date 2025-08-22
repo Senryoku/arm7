@@ -301,7 +301,7 @@ fn test_file(filepath: []const u8) !struct {
     const PrintAll = false;
     const basename = std.fs.path.basename(filepath);
 
-    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    const mem = try std.testing.allocator.alignedAlloc(u8, .@"32", 0x40000);
     defer std.testing.allocator.free(mem);
 
     var cpu = arm7.ARM7.init(mem, 0x00000000, 0xFFFFFFFF);

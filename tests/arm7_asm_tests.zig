@@ -11,11 +11,11 @@ fn disassemble_current_instruction(cpu: *arm7.ARM7) void {
 }
 
 fn expect_mem(mem: []const u8, address: u32, value: u32) !void {
-    try std.testing.expect(@as(*const u32, @alignCast(@ptrCast(&mem[address]))).* == value);
+    try std.testing.expect(@as(*const u32, @ptrCast(@alignCast(&mem[address]))).* == value);
 }
 
 test "ARM7 Tests" {
-    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    const mem = try std.testing.allocator.alignedAlloc(u8, .@"32", 0x40000);
     defer std.testing.allocator.free(mem);
 
     @memcpy(mem[0..test_program.len], test_program);
@@ -56,7 +56,7 @@ test "ARM7 Tests" {
 const ldm_stm = @embedFile("bin/ldm_stm.bin");
 
 test "ldm/stm" {
-    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    const mem = try std.testing.allocator.alignedAlloc(u8, .@"32", 0x40000);
     defer std.testing.allocator.free(mem);
 
     @memset(mem, 0);
@@ -96,7 +96,7 @@ test "ldm/stm" {
 }
 
 test "and" {
-    const mem = try std.testing.allocator.alignedAlloc(u8, 32, 0x40000);
+    const mem = try std.testing.allocator.alignedAlloc(u8, .@"32", 0x40000);
     defer std.testing.allocator.free(mem);
 
     const and_test = @embedFile("bin/and.bin");
