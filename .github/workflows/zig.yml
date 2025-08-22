@@ -28,4 +28,4 @@ jobs:
             - uses: mlugg/setup-zig@v2
               with:
                 version: ${{ steps.zigversion.outputs.version }}
-            - run: zig fmt --check src/*.zig
+            - run: zig fmt --check src
