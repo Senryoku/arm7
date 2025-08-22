@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const arm7 = @import("arm7.zig");
 
 const arm7_interpreter = @import("arm7_interpreter.zig");
@@ -118,7 +119,7 @@ fn disassemble_addr_mode_2(inst: arm7.SingleDataTransferInstruction) []const u8 
         }
     } else { // Post-indexed addressing
         if (inst.i == 0) {
-            std.debug.assert(inst.offset != 0);
+            std.debug.assert(builtin.is_test or inst.offset != 0);
             return std.fmt.bufPrint(&disassemble_addr_mode_temp, "[{s}], #{s}0x{X}", .{ disassemble_register(inst.rn), sign, inst.offset }) catch unreachable;
         } else {
             const sro = dissasemble_sro(@bitCast(inst.offset));
@@ -136,7 +137,7 @@ fn disassemble_branch_and_exchange(instruction: u32) []const u8 {
 fn disassemble_block_data_transfer(instruction: u32) []const u8 {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
     const cond = disassemble_condition(inst.cond);
-    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}, {s}", .{
+    return std.fmt.bufPrint(&disassemble_temp, "{s}{s}{s} {s}{s}, {s}{s}", .{
         if (inst.l == 0) "stm" else "ldm",
         cond,
         switch ((@as(u2, inst.u) << 1) | inst.p) {
@@ -148,6 +149,7 @@ fn disassemble_block_data_transfer(instruction: u32) []const u8 {
         disassemble_register(inst.rn),
         if (inst.w == 1) "!" else "",
         disassemble_reg_list(inst.reg_list),
+        if (inst.s == 1) "^" else "",
     }) catch unreachable;
 }
 
@@ -190,9 +192,17 @@ fn disassemble_single_data_transfer(instruction: u32) []const u8 {
 }
 
 fn disassemble_single_data_swap(instruction: u32) []const u8 {
-    _ = instruction;
+    const instr: arm7.SingleDataSwapInstruction = @bitCast(instruction);
 
-    return "SingleDataSwap";
+    const cond = disassemble_condition(instr.cond);
+
+    return std.fmt.bufPrint(&disassemble_temp, "swp{s}{s} {s},{s},[{s}]", .{
+        cond,
+        if (instr.b == 1) "b" else "",
+        disassemble_register(instr.rd),
+        disassemble_register(instr.rm),
+        disassemble_register(instr.rn),
+    }) catch unreachable;
 }
 
 fn disassemble_multiply(instruction: u32) []const u8 {

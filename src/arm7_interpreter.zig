@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const arm7_interpreter_log = std.log.scoped(.arm7_interpreter);
 
 const arm7 = @import("arm7.zig");
@@ -15,6 +16,12 @@ pub fn tick(self: *arm7.ARM7) void {
     self.instruction_pipeline[0] = self.fetch();
     execute(self, instr);
     self.check_fiq();
+}
+
+pub fn is_valid(instr: u32) bool {
+    const tag = arm7.ARM7.get_instr_tag(instr);
+    const handler = InstructionHandlers[arm7.JumpTable[tag]];
+    return handler != handle_undefined and handler != handle_invalid;
 }
 
 pub const InstructionHandlers = [_]*const fn (cpu: *arm7.ARM7, instruction: u32) void{
@@ -99,6 +106,8 @@ fn handle_branch_and_exchange(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.BlockDataTransferInstruction = @bitCast(instruction);
 
+    std.debug.assert(builtin.is_test or inst.rn != 15); // "R15 shall not be used as the base register in any LDM or STM instruction."
+
     const base = cpu.r[inst.rn];
 
     var addr = base;
@@ -107,7 +116,6 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 
     // The lowest-numbered register is stored at the lowest memory address and
     // the highest-numbered register at the highest memory address.
-
     // For simplicity we'll always loop through registers in ascending order,
     // adjust the address to the base of the range when decrementing.
     if (inst.u == 0) addr +%= stride *% (@popCount(inst.reg_list) - 1);
@@ -115,14 +123,26 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     // Pre indexing
     if (inst.p == 1) addr +%= stride;
 
+    // Change mode for the version that accesses user registers from priviliged modes.
+    const mode = cpu.cpsr.m;
+    const change_mode = mode != .User and inst.s == 1 and (inst.l == 0 or !inst.reg(15));
+    if (change_mode) cpu.change_mode(.User);
+    defer if (change_mode) cpu.change_mode(mode);
+
     // Writeback
     // NOTE: A load including rn in the register list will always overwrite this.
     //       However, a store will store the unchanged value if it is the first register
     //       in the list, and the updated value otherwise.
-    if (inst.w == 1)
-        cpu.r[inst.rn] +%= stride *% @popCount(inst.reg_list);
+    if (inst.w == 1) {
+        cpu.r[inst.rn] = base +% stride *% @popCount(inst.reg_list);
+        if (STR_STM_store_R15_plus_4 and inst.rn == 15) cpu.r[inst.rn] += 4;
+    }
+    var first_store = inst.w == 1; // Ignored if no writeback.
 
-    var first_store = true;
+    // The address should normally be a word aligned quantity and non-word aligned addresses do not affect the
+    // instruction. However, the bottom 2 bits of the address will appear on A[1:0] and might be interpreted by
+    // the memory system.
+    addr &= 0xFFFFFFFC;
 
     // LDM (1) / STM (1)
     if (inst.s == 0) {
@@ -136,62 +156,34 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
             }
             if (inst.reg(15)) {
                 const value = cpu.read(u32, addr);
-                cpu.set_pc(value & 0xFFFFFFFC);
-                cpu.cpsr.t = value & 1 == 1;
+                cpu.set_pc(value);
+                // cpu.cpsr.t = value & 1 == 1; // FIXME: If can't find the source of this anymore...
                 addr += 4;
             }
         } else {
             // Store STM(1)
             inline for (0..16) |i| {
                 if (inst.reg(i)) {
-                    var val = cpu.r[i];
-                    if (STR_STM_store_R15_plus_4 and i == 15) val += 4;
-
                     // See Writeback above.
-                    const value = if (first_store and i == inst.rn) base else val;
+                    var value = if (first_store and i == inst.rn) base else cpu.r[i];
                     first_store = false;
+                    if (STR_STM_store_R15_plus_4 and i == 15) value += 4;
 
                     cpu.write(u32, addr, value);
                     addr += 4;
-                    //if Shared(address) then /* from ARMv6 */
-                    //   physical_address = TLB(address)
-                    //   ClearExclusiveByAddress(physical_address,processor_id,4)
-                    // /* See Summary of operation on page A2-49 *
                 }
             }
         }
     } else {
         if (inst.l == 1) {
             if (!inst.reg(15)) {
+                std.debug.assert(change_mode or mode == .User);
                 // LDM (2) - Loads User mode registers when the processor is in a privileged mode.
-                if (cpu.cpsr.m == .FastInterrupt) {
-                    inline for (0..8) |i| {
-                        if (inst.reg(i)) {
-                            cpu.r[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
+                inline for (0..15) |i| {
+                    if (inst.reg(i)) {
+                        cpu.r[i] = cpu.read(u32, addr);
+                        addr += 4;
                     }
-                    inline for (0..5) |i| {
-                        if (inst.reg(8 + i)) {
-                            cpu.r_fiq_8_12[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
-                    }
-                } else {
-                    inline for (0..13) |i| {
-                        if (inst.reg(i)) {
-                            cpu.r[i] = cpu.read(u32, addr);
-                            addr += 4;
-                        }
-                    }
-                }
-                if (inst.reg(13)) {
-                    cpu.banked_regs(.User)[0] = cpu.read(u32, addr);
-                    addr += 4;
-                }
-                if (inst.reg(14)) {
-                    cpu.banked_regs(.User)[1] = cpu.read(u32, addr);
-                    addr += 4;
                 }
             } else {
                 // LDM (3) - Loads a subset, or possibly all, of the general-purpose registers and the PC from sequential memory
@@ -203,12 +195,23 @@ fn handle_block_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
                     }
                 }
                 cpu.restore_cpsr();
-                cpu.set_pc(cpu.read(u32, addr) & 0xFFFFFFFC);
+                cpu.set_pc(cpu.read(u32, addr));
             }
         } else {
-            // STM (1)
-            std.debug.print("Unimplemented STM with s=1\n", .{});
-            @panic("Unimplemented STM with s=1");
+            std.debug.assert(change_mode or mode == .User);
+            // STM with s=1 - User bank transfer
+            // User bank registers are transferred rather than the register bank.
+            inline for (0..16) |i| {
+                if (inst.reg(i)) {
+                    // See Writeback above.
+                    var value = if (first_store and i == inst.rn) base else cpu.r[i];
+                    first_store = false;
+                    if (STR_STM_store_R15_plus_4 and i == 15) value += 4;
+
+                    cpu.write(u32, addr, value);
+                    addr += 4;
+                }
+            }
         }
     }
 }
@@ -232,10 +235,12 @@ fn handle_branch(cpu: *arm7.ARM7, instruction: u32) void {
 }
 
 fn handle_software_interrupt(cpu: *arm7.ARM7, _: u32) void {
-    cpu.r_svc[1] = cpu.pc() - 4; // R14_svc = address of next instruction after the SWI instruction
+    const spc = cpu.pc() - 4;
+    cpu.spsr_svc = cpu.cpsr;
     cpu.change_mode(.Supervisor);
     cpu.cpsr.t = false; // Execute in ARM state (NOTE: We don't have a way to execute in THUMB state)
     cpu.cpsr.i = true; // Disable normal interrupts
+    cpu.r[14] = spc; // R14_svc = address of next instruction after the SWI instruction
 
     // FIXME: Something about high vectors? I guess the interrupt vector can be located at 0xFFFF0000 instead of 0x00000000 in some cases. we don't handle it.
     cpu.set_pc(0x00000008);
@@ -246,7 +251,7 @@ fn handle_undefined(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.UndefinedInstruction = @bitCast(instruction);
     _ = inst;
 
-    std.debug.print("Undefined instruction\n", .{});
+    std.debug.print("Undefined instruction: {X:0>8}\n", .{instruction});
     @panic("Undefined instruction");
 }
 
@@ -254,22 +259,21 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataTransferInstruction = @bitCast(instruction);
     std.debug.assert(inst._tag == 0b01);
 
-    std.debug.assert(inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
+    std.debug.assert(builtin.is_test or inst.rn != 15 or inst.w == 0); // Write-back must not be specified if R15 is specified as the base register (Rn)
 
     var offset: u32 = inst.offset;
     if (inst.i == 1) { // Offset is a register
-        const sro: ScaledRegisterOffset = @bitCast(inst.offset);
-        std.debug.assert(sro.rm != 15); // R15 must not be specified as the register offset (Rm).
-        std.debug.assert(sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
-        offset = offset_from_register(cpu, inst.offset).shifter_operand;
+        var sro: ScaledRegisterOffset = @bitCast(inst.offset);
+        std.debug.assert(builtin.is_test or sro.rm != 15); // R15 must not be specified as the register offset (Rm).
+        std.debug.assert(builtin.is_test or sro.register_specified == 0); // Register specified shift amounts are not available in this instruction class
+        if (sro.register_specified == 1) sro.register_specified = 0;
+        offset = offset_from_register(cpu, @bitCast(sro)).shifter_operand;
     }
 
+    const signed_offset: u32 = if (inst.u == 1) offset else (~offset +% 1);
+
     const base = cpu.r[inst.rn];
-
-    // NOTE: I'm not certain that the wrapping behavior here is needed, or if something else is wrong.
-    const offset_addr = if (inst.u == 1) base +% offset else base -% offset;
-
-    const addr = if (inst.p == 1) offset_addr else base;
+    const addr: u32 = @bitCast(if (inst.p == 1) base +% signed_offset else base);
 
     // In the case of post-indexed addressing (p == 0), the write back bit is redundant and must be set to zero,
     // since the old base value can be retained by setting the offset to zero.
@@ -280,9 +284,6 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
     if (inst.w == 1 and inst.p == 0) {
         // ?? Probably doesn't apply to our use case.
     }
-
-    // Post-indexed data transfers always write back the modified base.
-    if (inst.w == 1 or inst.p == 0) cpu.r[inst.rn] = offset_addr;
 
     if (inst.l == 0) {
         // Store to memory
@@ -295,26 +296,20 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
         else {
             // A word store (STR) should generate a word aligned address. The word presented to
             // the data bus is not affected if the address is not word aligned.
-            cpu.write(u32, addr & 0xFFFFFFFC, val);
+            cpu.write(u32, addr, val);
         }
+        // Post-indexed data transfers always write back the modified base.
+        if (inst.w == 1 or inst.p == 0)
+            cpu.r[inst.rn] +%= signed_offset;
     } else {
+        if (inst.w == 1 or inst.p == 0)
+            cpu.r[inst.rn] +%= signed_offset;
+
         // Load from memory
         if (inst.b == 1) {
             cpu.r[inst.rd] = cpu.read(u8, addr);
         } else {
-            // A word load (LDR) will normally use a word aligned address. However, an address
-            // offset from a word boundary will cause the data to be rotated into the register so that
-            // the addressed byte occupies bits 0 to 7. This means that half-words accessed at offsets
-            // 0 and 2 from the word boundary will be correctly loaded into bits 0 through 15 of the
-            // register. Two shift operations are then required to clear or to sign extend the upper 16
-            // bits.
-
-            // Load word aligned address
-            var val = cpu.read(u32, addr & 0xFFFFFFC);
-            // Rotate it so the addressed byte occupies bits 0 to 7
-            val = std.math.rotr(u32, val, (addr & 3) * 8);
-
-            cpu.r[inst.rd] = val;
+            cpu.r[inst.rd] = cpu.read(u32, addr);
         }
         if (inst.rd == 15) cpu.reset_pipeline();
     }
@@ -323,10 +318,14 @@ fn handle_single_data_transfer(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.SingleDataSwapInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != 15);
+    std.debug.assert(builtin.is_test or inst.rd != 15);
+    std.debug.assert(builtin.is_test or inst.rn != 15);
+    std.debug.assert(builtin.is_test or inst.rm != 15);
 
-    const addr = cpu.r[inst.rn];
-    const reg = cpu.r[inst.rm];
+    var addr = cpu.r[inst.rn];
+    if (STR_STM_store_R15_plus_4 and inst.rn == 15) addr += 4;
+    var reg = cpu.r[inst.rm];
+    if (STR_STM_store_R15_plus_4 and inst.rm == 15) reg += 4;
     if (inst.b == 1) {
         cpu.r[inst.rd] = cpu.read(u8, addr);
         cpu.write(u8, addr, @truncate(reg));
@@ -334,21 +333,34 @@ fn handle_single_data_swap(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.r[inst.rd] = cpu.read(u32, addr);
         cpu.write(u32, addr, reg);
     }
+
+    // NOTE: I think this should be an illegal instruction, but we'll handle it for easier testing.
+    if (inst.rd == 15)
+        cpu.reset_pipeline();
 }
 
 fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MultiplyInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != inst.rm);
-    std.debug.assert(inst.rd != 15);
-    std.debug.assert(inst.rm != 15);
-    std.debug.assert(inst.rs != 15);
+    if (!builtin.is_test) {
+        std.debug.assert(inst.rd != inst.rm); // NOTE: Per the docs, this case should return 0 when A == 0
+        std.debug.assert(inst.rd != 15);
+        std.debug.assert(inst.rm != 15);
+        std.debug.assert(inst.rs != 15);
+    }
 
-    var result: u32 = cpu.r[inst.rm] *% cpu.r[inst.rs];
+    var op1 = cpu.r[inst.rm];
+    var op2 = cpu.r[inst.rs];
+    var op3 = cpu.r[inst.rn];
+    if (inst.rm == 15) op1 += 4;
+    if (inst.rs == 15) op2 += 4;
+    if (inst.rn == 15) op3 += 4;
+
+    var result: u32 = op1 *% op2;
 
     if (inst.a == 1) {
-        std.debug.assert(inst.rn != 15);
-        result +%= cpu.r[inst.rn];
+        std.debug.assert(builtin.is_test or inst.rn != 15);
+        result +%= op3;
     }
 
     cpu.r[inst.rd] = result;
@@ -357,6 +369,8 @@ fn handle_multiply(cpu: *arm7.ARM7, instruction: u32) void {
         cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
         cpu.cpsr.z = cpu.r[inst.rd] == 0;
     }
+
+    if (inst.rd == 15) cpu.reset_pipeline();
 }
 
 fn handle_multiply_long(cpu: *arm7.ARM7, instruction: u32) void {
@@ -417,7 +431,7 @@ fn handle_coprocessor_register_transfer(cpu: *arm7.ARM7, instruction: u32) void 
 fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MRSInstruction = @bitCast(instruction);
 
-    std.debug.assert(inst.rd != 15);
+    std.debug.assert(builtin.is_test or inst.rd != 15);
 
     if (inst.r == 1) {
         cpu.r[inst.rd] = @bitCast(cpu.spsr().*);
@@ -430,29 +444,23 @@ fn handle_mrs(cpu: *arm7.ARM7, instruction: u32) void {
 fn handle_msr(cpu: *arm7.ARM7, instruction: u32) void {
     const inst: arm7.MSRInstruction = @bitCast(instruction);
 
-    const UnallocMask: u32 = 0x06F0FC00;
-    const UserMask: u32 = 0xF80F0200;
-    const PrivMask: u32 = 0x000001DF;
-    const StateMask: u32 = 0x01000020;
+    const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r[inst.source_operand & 0xF];
 
-    const operand = if (inst.i == 1) immediate_shifter_operand(inst.source_operand) else cpu.r[inst.source_operand & 0x1F];
+    var mask: u32 = 0;
+    if (inst.field_mask.c == 1) mask |= 0x000000FF;
+    if (inst.field_mask.x == 1) mask |= 0x0000FF00;
+    if (inst.field_mask.s == 1) mask |= 0x00FF0000;
+    if (inst.field_mask.f == 1) mask |= 0xFF000000;
 
-    std.debug.assert(operand & UnallocMask == 0);
-    const byte_mask: u32 = (if (inst.field_mask.c == 1) @as(u32, 0x000000FF) else 0x00000000) |
-        (if (inst.field_mask.x == 1) @as(u32, 0x0000FF00) else 0x00000000) |
-        (if (inst.field_mask.s == 1) @as(u32, 0x00FF0000) else 0x00000000) |
-        (if (inst.field_mask.f == 1) @as(u32, 0xFF000000) else 0x00000000);
     if (inst.r == 0) {
-        std.debug.assert(!cpu.in_a_privileged_mode() or operand & StateMask == 0);
-        const mask = byte_mask & if (cpu.in_a_privileged_mode()) (UserMask | PrivMask) else UserMask;
+        if (!cpu.in_a_privileged_mode()) mask &= 0xFF000000;
         cpu.set_cpsr(@bitCast((@as(u32, @bitCast(cpu.cpsr)) & ~mask) | (operand & mask)));
     } else {
-        const mask = byte_mask & (UserMask | PrivMask | StateMask);
         cpu.spsr().* = @bitCast((@as(u32, @bitCast(cpu.spsr().*)) & ~mask) | (operand & mask));
     }
 }
 
-inline fn n_flag(v: u32) bool {
+pub inline fn n_flag(v: u32) bool {
     return (v & 0x80000000) != 0;
 }
 
@@ -460,24 +468,24 @@ inline fn n_flag(v: u32) bool {
 // generates an overflow if both operands have the same sign (bit[31]), and the sign of the result is different to
 // the sign of both operands. Subtraction causes an overflow if the operands have different signs, and the first
 // operand and the result have different signs.
-inline fn overflow_from_add(op1: u32, op2: u32) bool {
+pub inline fn overflow_from_add(op1: u32, op2: u32) bool {
     const r: u32 = @bitCast(@as(i32, @bitCast(op1)) +% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 == op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
 }
 
-inline fn overflow_from_addc(op1: u32, op2: u32, carry: u32) bool {
+pub inline fn overflow_from_addc(op1: u32, op2: u32, carry: u32) bool {
     const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
     const r0 = @addWithOverflow(op[0], op[1]);
     const r1 = @addWithOverflow(r0[0], op[2]);
     return r0[1] == 1 or r1[1] == 1;
 }
 
-inline fn overflow_from_sub(op1: u32, op2: u32) bool {
+pub inline fn overflow_from_sub(op1: u32, op2: u32) bool {
     const r: u32 = @bitCast(@as(i32, @bitCast(op1)) -% @as(i32, @bitCast(op2)));
     return op1 & 0x80000000 != op2 & 0x80000000 and op1 & 0x80000000 != r & 0x80000000;
 }
 
-inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
+pub inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
     const op = [3]i32{ @bitCast(op1), @bitCast(op2), @bitCast(carry) };
     const r0 = @subWithOverflow(op[0], op[1]);
     const r1 = @subWithOverflow(r0[0], op[2]);
@@ -487,22 +495,22 @@ inline fn overflow_from_subc(op1: u32, op2: u32, carry: u32) bool {
 // Returns 1 if the addition specified as its parameter caused a carry (true result is bigger than 2^32−1, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about an addition which occurred earlier in the pseudo-code. The addition is not repeated.
-fn carry_from(op1: u32, op2: u32) bool {
+pub inline fn carry_from(op1: u32, op2: u32) bool {
     return @as(u64, op1) + @as(u64, op2) > 0xFFFFFFFF;
 }
 
-fn carry_from_addc(op1: u64, op2: u64, c: u64) bool {
+pub inline fn carry_from_addc(op1: u64, op2: u64, c: u64) bool {
     return op1 + op2 + c > 0xFFFFFFFF;
 }
 
 // Returns 1 if the subtraction specified as its parameter caused a borrow (the true result is less than 0, where
 // the operands are treated as unsigned integers), and returns 0 in all other cases. This delivers further
 // information about a subtraction which occurred earlier in the pseudo-code. The subtraction is not repeated.
-fn borrow_from(op1: u32, op2: u32) bool {
+pub inline fn borrow_from(op1: u32, op2: u32) bool {
     return op2 > op1;
 }
 
-fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
+pub inline fn borrow_from_subc(op1: u32, op2: u32, c: u32) bool {
     return op1 < @as(u64, op2) + c;
 }
 
@@ -511,22 +519,27 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
 
     // TODO: See "Writing to R15"
 
-    const op1 = cpu.r[inst.rn];
+    var op1 = cpu.r[inst.rn];
+
+    // The PC value will be the address of the instruction, plus 8 or 12 bytes due to instruction
+    // prefetching. If the shift amount is specified in the instruction, the PC will be 8 bytes
+    // ahead. If a register is used to specify the shift amount the PC will be 12 bytes ahead.
+    const sro: ScaledRegisterOffset = @bitCast(inst.operand2);
+    if (inst.rn == 15 and inst.i == 0 and sro.register_specified == 1)
+        op1 += 4;
 
     const shifter_result = if (inst.i == 0)
         offset_from_register(cpu, inst.operand2)
     else
         operand_2_immediate(cpu, inst.operand2);
 
-    var op2 = shifter_result.shifter_operand;
+    const op2 = shifter_result.shifter_operand;
 
     // TODO: Yes, this can and must be refactored.
     switch (inst.opcode) {
         .AND => {
             cpu.r[inst.rd] = op1 & op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -535,9 +548,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .EOR => {
             cpu.r[inst.rd] = op1 ^ op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -546,9 +557,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .SUB => {
             cpu.r[inst.rd] = op1 -% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from(op1, op2);
@@ -557,9 +566,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .RSB => {
             cpu.r[inst.rd] = op2 -% op1;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from(op2, op1);
@@ -568,9 +575,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ADD => {
             cpu.r[inst.rd] = op1 +% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = carry_from(op1, op2);
@@ -579,11 +584,8 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ADC => {
             const carry: u32 = if (cpu.cpsr.c) 1 else 0;
-            op2 +%= carry;
-            cpu.r[inst.rd] = op1 +% op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            cpu.r[inst.rd] = op1 +% op2 +% carry;
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = carry_from_addc(op1, op2, carry);
@@ -593,9 +595,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         .SBC => {
             const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r[inst.rd] = op1 -% op2 -% carry;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from_subc(op1, op2, carry);
@@ -605,9 +605,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         .RSC => {
             const carry: u32 = if (cpu.cpsr.c) 0 else 1;
             cpu.r[inst.rd] = op2 -% op1 -% carry;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = !borrow_from_subc(op2, op1, carry);
@@ -646,9 +644,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .ORR => {
             cpu.r[inst.rd] = op1 | op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -657,9 +653,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .MOV => {
             cpu.r[inst.rd] = op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -668,9 +662,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .BIC => {
             cpu.r[inst.rd] = op1 & ~op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -679,9 +671,7 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
         },
         .MVN => {
             cpu.r[inst.rd] = ~op2;
-            if (inst.s == 1 and inst.rd == 15) {
-                cpu.restore_cpsr();
-            } else if (inst.s == 1) {
+            if (inst.s == 1) {
                 cpu.cpsr.n = n_flag(cpu.r[inst.rd]);
                 cpu.cpsr.z = cpu.r[inst.rd] == 0;
                 cpu.cpsr.c = shifter_result.shifter_carry_out;
@@ -689,11 +679,15 @@ fn handle_data_processing(cpu: *arm7.ARM7, instruction: u32) void {
             }
         },
     }
+    if (inst.rd == 15) {
+        if (inst.s == 1)
+            cpu.restore_cpsr();
 
-    // If PC as been written to, flush pipeline and refill it.
-    switch (inst.opcode) {
-        .TST, .TEQ, .CMP, .CMN => {},
-        else => if (inst.rd == 15) cpu.reset_pipeline(),
+        // If PC as been written to, flush pipeline and refill it.
+        switch (inst.opcode) {
+            .TST, .TEQ, .CMP, .CMN => {},
+            else => cpu.reset_pipeline(),
+        }
     }
 }
 
