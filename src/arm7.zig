@@ -666,7 +666,7 @@ pub const ARM7 = struct {
         const instr = if (@import("builtin").is_test and self.on_external_read32.data != null)
             self.read(u32, self.pc() & 0xFFFF_FFFC)
         else
-            @as(*const u32, @alignCast(@ptrCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
+            @as(*const u32, @ptrCast(@alignCast(&self.memory[self.pc() & self.memory_address_mask]))).*;
         self.r[15] +%= 4;
         return instr;
     }
@@ -683,7 +683,7 @@ pub const ARM7 = struct {
             u8 => self.on_external_read8.callback(self.on_external_read8.data.?, aligned_addr),
             u32 => self.on_external_read32.callback(self.on_external_read32.data.?, aligned_addr),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
-        } else @as(*const T, @alignCast(@ptrCast(&self.memory[aligned_addr & self.memory_address_mask]))).*;
+        } else @as(*const T, @ptrCast(@alignCast(&self.memory[aligned_addr & self.memory_address_mask]))).*;
 
         if (T == u32 and address != aligned_addr) {
             // A word load (LDR) will normally use a word aligned address. However, an address
@@ -705,7 +705,7 @@ pub const ARM7 = struct {
             u32 => return self.on_external_write32.callback(self.on_external_write32.data.?, aligned, value),
             else => @compileError("Unsupported type: " ++ @typeName(T)),
         };
-        @as(*T, @alignCast(@ptrCast(&self.memory[aligned & self.memory_address_mask]))).* = value;
+        @as(*T, @ptrCast(@alignCast(&self.memory[aligned & self.memory_address_mask]))).* = value;
     }
 
     pub inline fn in_a_privileged_mode(self: *const @This()) bool {
@@ -716,7 +716,7 @@ pub const ARM7 = struct {
         return dissasemble.DisassembleTable[JumpTable[@This().get_instr_tag(instr)]](instr);
     }
 
-    pub fn serialize(self: *const @This(), writer: anytype) !usize {
+    pub fn serialize(self: *const @This(), writer: *std.Io.Writer) !usize {
         var bytes: usize = 0;
         bytes += try writer.write(std.mem.asBytes(&self.memory_address_mask));
         bytes += try writer.write(std.mem.asBytes(&self.external_memory_address_mask));
@@ -740,27 +740,39 @@ pub const ARM7 = struct {
         return bytes;
     }
 
-    pub fn deserialize(self: *@This(), reader: anytype) !usize {
-        var bytes: usize = 0;
-        bytes += try reader.read(std.mem.asBytes(&self.memory_address_mask));
-        bytes += try reader.read(std.mem.asBytes(&self.external_memory_address_mask));
-        bytes += try reader.read(std.mem.asBytes(&self.cpsr));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_fiq_8_12[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_usr[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_fiq[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_svc[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_irq[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_abt[0..]));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.r_und[0..]));
-        bytes += try reader.read(std.mem.asBytes(&self.spsr_irq));
-        bytes += try reader.read(std.mem.asBytes(&self.spsr_svc));
-        bytes += try reader.read(std.mem.asBytes(&self.spsr_fiq));
-        bytes += try reader.read(std.mem.asBytes(&self.spsr_abt));
-        bytes += try reader.read(std.mem.asBytes(&self.spsr_und));
-        bytes += try reader.read(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
-        bytes += try reader.read(std.mem.asBytes(&self.fiq_signaled));
-        bytes += try reader.read(std.mem.asBytes(&self.running));
-        return bytes;
+    pub fn deserialize(self: *@This(), reader: *std.Io.Reader) !void {
+        try reader.readSliceAll(std.mem.asBytes(&self.memory_address_mask));
+        try reader.readSliceAll(std.mem.asBytes(&self.external_memory_address_mask));
+        try reader.readSliceAll(std.mem.asBytes(&self.cpsr));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_fiq_8_12[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_usr[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_fiq[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_svc[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_irq[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_abt[0..]));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.r_und[0..]));
+        try reader.readSliceAll(std.mem.asBytes(&self.spsr_irq));
+        try reader.readSliceAll(std.mem.asBytes(&self.spsr_svc));
+        try reader.readSliceAll(std.mem.asBytes(&self.spsr_fiq));
+        try reader.readSliceAll(std.mem.asBytes(&self.spsr_abt));
+        try reader.readSliceAll(std.mem.asBytes(&self.spsr_und));
+        try reader.readSliceAll(std.mem.sliceAsBytes(self.instruction_pipeline[0..]));
+        try reader.readSliceAll(std.mem.asBytes(&self.fiq_signaled));
+        try reader.readSliceAll(std.mem.asBytes(&self.running));
     }
 };
+
+test "serialization" {
+    // Just make sure it compiles and runs
+    var arm7 = ARM7.init(&[0]u8{}, 0x00000000, 0xFFFFFFFF);
+    var allocating_writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer allocating_writer.deinit();
+    var writer = &allocating_writer.writer;
+    _ = try arm7.serialize(writer);
+    try writer.flush();
+
+    var arm7_deserialized = ARM7.init(&[0]u8{}, 0x00000000, 0xFFFFFFFF);
+    var reader = std.Io.Reader.fixed(allocating_writer.written());
+    try arm7_deserialized.deserialize(&reader);
+}
