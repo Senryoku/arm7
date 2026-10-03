@@ -2,7 +2,7 @@
     .name = .arm7,
     .fingerprint = 0x9d4543a1ac775f6a,
     .version = "0.1.0",
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",

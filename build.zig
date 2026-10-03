@@ -17,14 +17,13 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
-    const lib_unit_tests_module = b.addModule("arm7_tests", .{
-        .root_source_file = b.path("src/arm7.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
     const lib_unit_tests = b.addTest(.{
         .name = "arm7_tests",
-        .root_module = lib_unit_tests_module,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/arm7.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     b.installArtifact(lib_unit_tests);
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);

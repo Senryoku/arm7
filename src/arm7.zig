@@ -491,20 +491,20 @@ pub const ARM7 = struct {
 
     pub fn reset(self: *@This()) void {
         self.cpsr = .{};
-        self.r = [_]u32{0} ** 16;
-        self.r_fiq_8_12 = [_]u32{0} ** 5;
-        self.r_usr = [_]u32{0} ** 2;
-        self.r_fiq = [_]u32{0} ** 2;
-        self.r_svc = [_]u32{0} ** 2;
-        self.r_irq = [_]u32{0} ** 2;
-        self.r_abt = [_]u32{0} ** 2;
-        self.r_und = [_]u32{0} ** 2;
+        self.r = @splat(0);
+        self.r_fiq_8_12 = @splat(0);
+        self.r_usr = @splat(0);
+        self.r_fiq = @splat(0);
+        self.r_svc = @splat(0);
+        self.r_irq = @splat(0);
+        self.r_abt = @splat(0);
+        self.r_und = @splat(0);
         self.spsr_irq = .{};
         self.spsr_svc = .{};
         self.spsr_fiq = .{};
         self.spsr_abt = .{};
         self.spsr_und = .{};
-        self.instruction_pipeline = [_]u32{0} ** 1;
+        self.instruction_pipeline = @splat(0);
         self.fiq_signaled = false;
         self.running = false;
     }
